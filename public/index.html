@@ -3,14 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Multiplayer Tic-Tac-Toe</title>
+  <title>Game Room</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- LOBBY SCREEN -->
+
+  <!-- ═══ LOBBY SCREEN ═══ -->
   <div id="screen-lobby" class="screen active">
     <div class="card">
-      <h1>Tic-Tac-Toe</h1>
+      <h1>Game Room</h1>
       <p class="subtitle">Real-time multiplayer</p>
 
       <div class="form-group">
@@ -18,15 +19,22 @@
         <input id="player-name" type="text" placeholder="Enter your name" maxlength="20" />
       </div>
 
-      <div class="divider">
-        <span>Create or Join</span>
-      </div>
+      <div class="divider"><span>Create or Join</span></div>
 
       <div class="lobby-options">
         <!-- Create Room -->
         <div class="option-box">
           <h3>Create Room</h3>
+
           <div class="form-group">
+            <label>Game</label>
+            <div class="game-type-btns">
+              <button class="game-type-btn active" data-game="ttt">⬜ Tic-Tac-Toe</button>
+              <button class="game-type-btn" data-game="sps">✌️ Scissors Paper Stone</button>
+            </div>
+          </div>
+
+          <div class="form-group" id="grid-size-section">
             <label>Grid size</label>
             <div class="grid-size-btns">
               <button class="size-btn active" data-size="3">3×3</button>
@@ -34,6 +42,16 @@
               <button class="size-btn" data-size="5">5×5</button>
             </div>
           </div>
+
+          <div class="form-group hidden" id="bestof-section">
+            <label>Best of</label>
+            <div class="grid-size-btns">
+              <button class="bestof-btn active" data-bestof="3">3</button>
+              <button class="bestof-btn" data-bestof="5">5</button>
+              <button class="bestof-btn" data-bestof="7">7</button>
+            </div>
+          </div>
+
           <button id="btn-create" class="btn btn-primary">Create Room</button>
         </div>
 
@@ -52,7 +70,7 @@
     </div>
   </div>
 
-  <!-- WAITING SCREEN -->
+  <!-- ═══ WAITING SCREEN ═══ -->
   <div id="screen-waiting" class="screen">
     <div class="card center">
       <h2>Waiting for opponent...</h2>
@@ -63,10 +81,9 @@
     </div>
   </div>
 
-  <!-- GAME SCREEN -->
+  <!-- ═══ TTT GAME SCREEN ═══ -->
   <div id="screen-game" class="screen">
     <div class="game-container">
-      <!-- Score Bar -->
       <div class="score-bar">
         <div class="player-score" id="score-p1">
           <span class="player-name" id="name-p1">Player 1</span>
@@ -81,15 +98,12 @@
         </div>
       </div>
 
-      <!-- Turn Indicator -->
       <div class="turn-indicator" id="turn-indicator">Waiting...</div>
 
-      <!-- Board -->
       <div class="board-wrapper">
         <div id="game-board" class="board"></div>
       </div>
 
-      <!-- Game Over Overlay -->
       <div id="game-over-overlay" class="overlay hidden">
         <div class="overlay-card">
           <div id="result-icon" class="result-icon"></div>
@@ -100,7 +114,6 @@
         </div>
       </div>
 
-      <!-- Disconnected Overlay -->
       <div id="disconnected-overlay" class="overlay hidden">
         <div class="overlay-card">
           <div class="result-icon">😞</div>
@@ -109,6 +122,109 @@
           <button onclick="location.reload()" class="btn btn-primary">Back to Lobby</button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- ═══ SPS GAME SCREEN ═══ -->
+  <div id="screen-sps" class="screen">
+    <div class="sps-container">
+
+      <!-- Score bar -->
+      <div class="score-bar sps-score-bar">
+        <div class="player-score" id="sps-score-p1">
+          <span class="player-name" id="sps-name-p1">Player 1</span>
+          <span class="score-value" id="sps-val-p1">0</span>
+        </div>
+        <div class="sps-meta">
+          <div class="room-code-badge" id="sps-room-code">----</div>
+          <div class="round-label" id="sps-round-label">Round 1</div>
+        </div>
+        <div class="player-score right" id="sps-score-p2">
+          <span class="score-value" id="sps-val-p2">0</span>
+          <span class="player-name" id="sps-name-p2">Player 2</span>
+        </div>
+      </div>
+
+      <!-- Best-of indicator -->
+      <div class="bestof-bar" id="bestof-bar">Best of 3</div>
+
+      <!-- Status -->
+      <div class="sps-status" id="sps-status">Get ready...</div>
+
+      <!-- Timer -->
+      <div class="timer-wrap" id="timer-wrap">
+        <div class="timer-bar" id="timer-bar"></div>
+      </div>
+
+      <!-- Choice phase -->
+      <div class="choice-area" id="choice-area">
+        <button class="choice-btn rock" data-choice="rock">
+          <span class="choice-emoji">✊</span>
+          <span class="choice-label">Rock</span>
+          <div class="choice-ripple"></div>
+        </button>
+        <button class="choice-btn paper" data-choice="paper">
+          <span class="choice-emoji">🖐️</span>
+          <span class="choice-label">Paper</span>
+          <div class="choice-ripple"></div>
+        </button>
+        <button class="choice-btn scissors" data-choice="scissors">
+          <span class="choice-emoji">✌️</span>
+          <span class="choice-label">Scissors</span>
+          <div class="choice-ripple"></div>
+        </button>
+      </div>
+
+      <!-- Reveal phase (hidden initially) -->
+      <div class="reveal-area hidden" id="reveal-area">
+        <div class="countdown-display" id="countdown-display"></div>
+        <div class="reveal-cards" id="reveal-cards">
+          <div class="reveal-card-wrap">
+            <div class="reveal-card" id="my-reveal-card">
+              <div class="card-face card-front">?</div>
+              <div class="card-face card-back" id="my-card-content">✊</div>
+            </div>
+            <div class="card-name" id="my-card-name">You</div>
+          </div>
+          <div class="vs-badge">VS</div>
+          <div class="reveal-card-wrap">
+            <div class="reveal-card" id="opp-reveal-card">
+              <div class="card-face card-front">?</div>
+              <div class="card-face card-back" id="opp-card-content">✊</div>
+            </div>
+            <div class="card-name" id="opp-card-name">Opponent</div>
+          </div>
+        </div>
+        <div class="round-result-text" id="round-result-text"></div>
+      </div>
+
+      <!-- Round History (bottom-left, fixed) -->
+      <div class="sps-history" id="sps-history">
+        <div class="history-label">Round History</div>
+        <div id="history-rows"></div>
+      </div>
+
+      <!-- Match Over Overlay -->
+      <div id="sps-match-over" class="overlay hidden">
+        <div class="overlay-card match-over-card">
+          <div class="result-icon" id="sps-match-icon">🏆</div>
+          <h2 id="sps-match-text">Match Over</h2>
+          <div class="final-scores" id="sps-final-scores"></div>
+          <button id="sps-btn-play-again" class="btn btn-primary">Play Again</button>
+          <p id="sps-rematch-status" class="hint hidden">Waiting for opponent...</p>
+        </div>
+      </div>
+
+      <!-- Disconnected Overlay -->
+      <div id="sps-disconnected" class="overlay hidden">
+        <div class="overlay-card">
+          <div class="result-icon">😞</div>
+          <h2>Opponent Disconnected</h2>
+          <p>Your opponent has left the game.</p>
+          <button onclick="location.reload()" class="btn btn-primary">Back to Lobby</button>
+        </div>
+      </div>
+
     </div>
   </div>
 
