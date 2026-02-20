@@ -5,14 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Game Room</title>
   <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet" />
 </head>
 <body>
+  <div class="crt-overlay"></div>
 
   <!-- ═══ LOBBY SCREEN ═══ -->
   <div id="screen-lobby" class="screen active">
     <div class="card">
       <h1>Game Room</h1>
-      <p class="subtitle">Real-time multiplayer</p>
+      <p class="subtitle">INSERT COIN TO PLAY</p>
 
       <div class="form-group">
         <label for="player-name">Your name</label>
@@ -67,6 +69,11 @@
       </div>
 
       <p id="lobby-error" class="error-msg hidden"></p>
+
+      <div class="ken-wrapper">
+        <div class="ken-sprite"></div>
+        <div class="ken-label">KEN</div>
+      </div>
     </div>
   </div>
 
