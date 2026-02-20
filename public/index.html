@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Multiplayer Tic-Tac-Toe</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- LOBBY SCREEN -->
+  <div id="screen-lobby" class="screen active">
+    <div class="card">
+      <h1>Tic-Tac-Toe</h1>
+      <p class="subtitle">Real-time multiplayer</p>
+
+      <div class="form-group">
+        <label for="player-name">Your name</label>
+        <input id="player-name" type="text" placeholder="Enter your name" maxlength="20" />
+      </div>
+
+      <div class="divider">
+        <span>Create or Join</span>
+      </div>
+
+      <div class="lobby-options">
+        <!-- Create Room -->
+        <div class="option-box">
+          <h3>Create Room</h3>
+          <div class="form-group">
+            <label>Grid size</label>
+            <div class="grid-size-btns">
+              <button class="size-btn active" data-size="3">3×3</button>
+              <button class="size-btn" data-size="4">4×4</button>
+              <button class="size-btn" data-size="5">5×5</button>
+            </div>
+          </div>
+          <button id="btn-create" class="btn btn-primary">Create Room</button>
+        </div>
+
+        <!-- Join Room -->
+        <div class="option-box">
+          <h3>Join Room</h3>
+          <div class="form-group">
+            <label for="room-code-input">Room code</label>
+            <input id="room-code-input" type="text" placeholder="e.g. AB12" maxlength="4" style="text-transform:uppercase" />
+          </div>
+          <button id="btn-join" class="btn btn-secondary">Join Room</button>
+        </div>
+      </div>
+
+      <p id="lobby-error" class="error-msg hidden"></p>
+    </div>
+  </div>
+
+  <!-- WAITING SCREEN -->
+  <div id="screen-waiting" class="screen">
+    <div class="card center">
+      <h2>Waiting for opponent...</h2>
+      <p>Share this code with your friend:</p>
+      <div class="room-code-display" id="display-room-code">----</div>
+      <p class="hint">They'll enter this code on the Join screen</p>
+      <div class="spinner"></div>
+    </div>
+  </div>
+
+  <!-- GAME SCREEN -->
+  <div id="screen-game" class="screen">
+    <div class="game-container">
+      <!-- Score Bar -->
+      <div class="score-bar">
+        <div class="player-score" id="score-p1">
+          <span class="player-name" id="name-p1">Player 1</span>
+          <span class="symbol x-symbol">X</span>
+          <span class="score-value" id="val-p1">0</span>
+        </div>
+        <div class="room-code-badge" id="game-room-code">----</div>
+        <div class="player-score right" id="score-p2">
+          <span class="score-value" id="val-p2">0</span>
+          <span class="symbol o-symbol">O</span>
+          <span class="player-name" id="name-p2">Player 2</span>
+        </div>
+      </div>
+
+      <!-- Turn Indicator -->
+      <div class="turn-indicator" id="turn-indicator">Waiting...</div>
+
+      <!-- Board -->
+      <div class="board-wrapper">
+        <div id="game-board" class="board"></div>
+      </div>
+
+      <!-- Game Over Overlay -->
+      <div id="game-over-overlay" class="overlay hidden">
+        <div class="overlay-card">
+          <div id="result-icon" class="result-icon"></div>
+          <h2 id="result-text">Game Over</h2>
+          <div class="final-scores" id="final-scores"></div>
+          <button id="btn-play-again" class="btn btn-primary">Play Again</button>
+          <p id="rematch-status" class="hint hidden">Waiting for opponent...</p>
+        </div>
+      </div>
+
+      <!-- Disconnected Overlay -->
+      <div id="disconnected-overlay" class="overlay hidden">
+        <div class="overlay-card">
+          <div class="result-icon">😞</div>
+          <h2>Opponent Disconnected</h2>
+          <p>Your opponent has left the game.</p>
+          <button onclick="location.reload()" class="btn btn-primary">Back to Lobby</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
