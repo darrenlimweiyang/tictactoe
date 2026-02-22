@@ -31,10 +31,12 @@ let selectedBestOf = 3;
 
 // ══ DOM REFS ════════════════════════════════════════════════════════════════
 const screens = {
-  lobby:   document.getElementById('screen-lobby'),
-  waiting: document.getElementById('screen-waiting'),
-  game:    document.getElementById('screen-game'),
-  sps:     document.getElementById('screen-sps'),
+  lobby:       document.getElementById('screen-lobby'),
+  waiting:     document.getElementById('screen-waiting'),
+  game:        document.getElementById('screen-game'),
+  sps:         document.getElementById('screen-sps'),
+  'gvb-alloc': document.getElementById('screen-gvb-alloc'),
+  'gvb-battle':document.getElementById('screen-gvb-battle'),
 };
 
 // Lobby
@@ -97,6 +99,9 @@ document.querySelectorAll('.game-type-btn').forEach(btn => {
     if (selectedGameType === 'sps') {
       gridSizeSection.classList.add('hidden');
       bestofSection.classList.remove('hidden');
+    } else if (selectedGameType === 'gvb') {
+      gridSizeSection.classList.add('hidden');
+      bestofSection.classList.add('hidden');
     } else {
       gridSizeSection.classList.remove('hidden');
       bestofSection.classList.add('hidden');
@@ -661,10 +666,14 @@ socket.on('matchOver', (data) => {
 });
 
 socket.on('opponentWantsRematch', () => {
-  // Works for both TTT and SPS
+  // Works for TTT, SPS, and GVB
   if (gameType === 'sps') {
     spsRematchStatus.textContent = 'Opponent is ready — click Play Again!';
     spsRematchStatus.classList.remove('hidden');
+  } else if (gameType === 'gvb') {
+    const el = document.getElementById('gvb-rematch-status');
+    el.textContent = 'Opponent is ready — click Play Again!';
+    el.classList.remove('hidden');
   } else {
     rematchStatus.textContent = 'Opponent is ready — click Play Again!';
     rematchStatus.classList.remove('hidden');
@@ -675,7 +684,559 @@ socket.on('opponentDisconnected', () => {
   stopVisualTimer();
   if (gameType === 'sps') {
     spsDisconnected.classList.remove('hidden');
+  } else if (gameType === 'gvb') {
+    document.getElementById('gvb-disconnected').classList.remove('hidden');
   } else {
     disconnOverlay.classList.remove('hidden');
   }
 });
+
+// ══ GVB (SCISSORME) ══════════════════════════════════════════════════════════
+
+// ── GVB State ─────────────────────────────────────────────────────────────────
+let gvbMyStats = null;
+let gvbOppStats = null;
+let gvbOppName = 'Opponent';
+let gvbRoundNumber = 1;
+let gvbGameOver = false;
+let gvbWaitingRematch = false;
+let gvbMoveSelected = false;
+let _prevMyArmor  = null;   // armor-break tracking
+let _prevOppArmor = null;
+let gvbAllocationDeltas = {};
+let gvbPointsLeft = 10;
+let gvbAllocTimerRaf = null;
+let gvbAllocTimerStart = null;
+let gvbBattleTimerRaf = null;
+let gvbBattleTimerStart = null;
+const GVB_ALLOC_DURATION  = 60000;
+const GVB_TURN_DURATION   = 30000;
+const GVB_BASE_VALUES = { hp: 10, max_armor: 5, sword_atk: 2, sword_def: 0, shield_atk: 0, shield_def: 2, magic_atk: 1, magic_def: 1 };
+const MOVE_EMOJI = { sword: '⚔️', shield: '🛡️', magic: '🪄' };
+
+// ── GVB DOM Refs ──────────────────────────────────────────────────────────────
+const gvbAllocRoomCode  = document.getElementById('gvb-alloc-room-code');
+const gvbOpponentStatus = document.getElementById('gvb-opponent-status');
+const gvbAllocTimerBar  = document.getElementById('gvb-alloc-timer-bar');
+const gvbPointsLeftEl   = document.getElementById('gvb-points-left');
+const gvbBtnReady       = document.getElementById('gvb-btn-ready');
+const gvbBattleRoomCode = document.getElementById('gvb-battle-room-code');
+const gvbRoundCounter   = document.getElementById('gvb-round-counter');
+const gvbBattleTimerBar = document.getElementById('gvb-battle-timer-bar');
+const gvbBattleStatus   = document.getElementById('gvb-battle-status');
+const gvbOppNameEl      = document.getElementById('gvb-opp-name');
+const gvbSuddenDeathBanner = document.getElementById('gvb-sudden-death-banner');
+const gvbRoundFlash     = document.getElementById('gvb-round-flash');
+const gvbFlashContent   = document.getElementById('gvb-flash-content');
+const gvbGameOverOverlay= document.getElementById('gvb-game-over-overlay');
+const gvbResultIcon     = document.getElementById('gvb-result-icon');
+const gvbResultText     = document.getElementById('gvb-result-text');
+const gvbFinalScores    = document.getElementById('gvb-final-scores');
+const gvbBtnPlayAgain   = document.getElementById('gvb-btn-play-again');
+const gvbRematchStatus  = document.getElementById('gvb-rematch-status');
+const gvbDisconnected   = document.getElementById('gvb-disconnected');
+const gvbHistoryRows    = document.getElementById('gvb-history-rows');
+const gvbMoveArea       = document.getElementById('gvb-move-area');
+
+// ── GVB Allocation UI ─────────────────────────────────────────────────────────
+function resetAllocDeltas() {
+  gvbAllocationDeltas = {};
+  Object.keys(GVB_BASE_VALUES).forEach(k => { gvbAllocationDeltas[k] = 0; });
+  gvbPointsLeft = 10;
+}
+
+function updateAllocUI() {
+  gvbPointsLeftEl.textContent = gvbPointsLeft;
+  const pointsWrap = document.querySelector('.gvb-points-remaining');
+  if (pointsWrap) pointsWrap.classList.toggle('zero', gvbPointsLeft === 0);
+  gvbBtnReady.disabled = gvbPointsLeft !== 0;
+  for (const stat of Object.keys(GVB_BASE_VALUES)) {
+    const delta = gvbAllocationDeltas[stat] || 0;
+    const total = GVB_BASE_VALUES[stat] + delta;
+    const deltaEl = document.getElementById(`gvb-delta-${stat}`);
+    const totalEl = document.getElementById(`gvb-total-${stat}`);
+    if (deltaEl) deltaEl.textContent = delta;
+    if (totalEl) totalEl.textContent = total;
+    const row = document.querySelector(`.stat-row[data-stat="${stat}"]`);
+    if (row) {
+      row.querySelector('.minus').disabled = delta <= 0;
+      row.querySelector('.plus').disabled  = gvbPointsLeft <= 0;
+    }
+  }
+}
+
+document.querySelectorAll('.stat-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const stat = btn.dataset.stat;
+    if (btn.classList.contains('plus')) {
+      if (gvbPointsLeft <= 0) return;
+      gvbAllocationDeltas[stat] = (gvbAllocationDeltas[stat] || 0) + 1;
+      gvbPointsLeft -= 1;
+    } else {
+      if ((gvbAllocationDeltas[stat] || 0) <= 0) return;
+      gvbAllocationDeltas[stat] -= 1;
+      gvbPointsLeft += 1;
+    }
+    updateAllocUI();
+  });
+});
+
+gvbBtnReady.addEventListener('click', () => {
+  if (gvbPointsLeft !== 0) return;
+  socket.emit('submit_allocation', gvbAllocationDeltas);
+  gvbBtnReady.disabled = true;
+  gvbBtnReady.textContent = 'SUBMITTED';
+  document.querySelectorAll('.stat-btn').forEach(b => b.disabled = true);
+});
+
+// ── GVB Timers ────────────────────────────────────────────────────────────────
+function startGvbAllocTimer() {
+  stopGvbAllocTimer();
+  gvbAllocTimerBar.style.width = '100%';
+  gvbAllocTimerBar.classList.remove('urgent');
+  gvbAllocTimerStart = Date.now();
+  function tick() {
+    const rem = Math.max(0, GVB_ALLOC_DURATION - (Date.now() - gvbAllocTimerStart));
+    gvbAllocTimerBar.style.width = (rem / GVB_ALLOC_DURATION * 100) + '%';
+    if (rem <= 10000) gvbAllocTimerBar.classList.add('urgent');
+    if (rem > 0) gvbAllocTimerRaf = requestAnimationFrame(tick);
+  }
+  gvbAllocTimerRaf = requestAnimationFrame(tick);
+}
+function stopGvbAllocTimer() {
+  if (gvbAllocTimerRaf) { cancelAnimationFrame(gvbAllocTimerRaf); gvbAllocTimerRaf = null; }
+}
+function startGvbBattleTimer() {
+  stopGvbBattleTimer();
+  gvbBattleTimerBar.style.width = '100%';
+  gvbBattleTimerBar.classList.remove('urgent');
+  gvbBattleTimerStart = Date.now();
+  function tick() {
+    const rem = Math.max(0, GVB_TURN_DURATION - (Date.now() - gvbBattleTimerStart));
+    gvbBattleTimerBar.style.width = (rem / GVB_TURN_DURATION * 100) + '%';
+    if (rem <= 5000) gvbBattleTimerBar.classList.add('urgent');
+    if (rem > 0) gvbBattleTimerRaf = requestAnimationFrame(tick);
+  }
+  gvbBattleTimerRaf = requestAnimationFrame(tick);
+}
+function stopGvbBattleTimer() {
+  if (gvbBattleTimerRaf) { cancelAnimationFrame(gvbBattleTimerRaf); gvbBattleTimerRaf = null; }
+}
+
+// ── GVB Screen Init ───────────────────────────────────────────────────────────
+function initGvbAllocScreen() {
+  resetAllocDeltas();
+  gvbAllocRoomCode.textContent = displayRoomCode.textContent;
+  gvbOpponentStatus.textContent = 'Opponent allocating...';
+  gvbOpponentStatus.classList.remove('ready');
+  gvbBtnReady.disabled = true;
+  gvbBtnReady.textContent = 'READY';
+  document.querySelectorAll('.stat-btn').forEach(b => b.disabled = false);
+  updateAllocUI();
+  startGvbAllocTimer();
+  showScreen('gvb-alloc');
+}
+
+function initGvbBattleScreen(data) {
+  const { your_stats, opponent_stats, opponent_name, your_charges, opp_charges } = data;
+  gvbMyStats = your_stats;
+  gvbOppStats = opponent_stats;
+  gvbOppName = opponent_name;
+  gvbRoundNumber = 1;
+  gvbGameOver = false;
+  gvbMoveSelected = false;
+  _prevMyArmor  = null;
+  _prevOppArmor = null;
+  document.querySelector('.gvb-arena').classList.remove('sudden-death-mode');
+  document.querySelector('.gvb-battle-container').classList.remove('low-hp');
+  stopGvbAllocTimer();
+
+  gvbBattleRoomCode.textContent = displayRoomCode.textContent;
+  gvbOppNameEl.textContent = opponent_name;
+  const _myNameEl = document.getElementById('gvb-my-name');
+  if (_myNameEl) _myNameEl.textContent = playerNameInput.value || 'YOU';
+  document.getElementById('gvb-my-max-hp').textContent     = your_stats.hp;
+  document.getElementById('gvb-my-max-armor').textContent  = your_stats.max_armor;
+  document.getElementById('gvb-opp-max-hp').textContent    = opponent_stats.hp;
+  document.getElementById('gvb-opp-max-armor').textContent = opponent_stats.max_armor;
+
+  renderGvbBars(your_stats.hp, your_stats.max_armor, opponent_stats.hp, opponent_stats.max_armor);
+  renderGvbStatSheet('gvb-my-stat-sheet', your_stats);
+  renderGvbStatSheet('gvb-opp-stat-sheet', opponent_stats);
+  renderGvbCharges(your_charges, opp_charges);
+
+  // Populate move button Atk/Def stats
+  const _moveStats = {
+    sword:  { atk: your_stats.sword_atk,  def: your_stats.sword_def  },
+    shield: { atk: your_stats.shield_atk, def: your_stats.shield_def },
+    magic:  { atk: your_stats.magic_atk,  def: your_stats.magic_def  },
+  };
+  for (const [move, vals] of Object.entries(_moveStats)) {
+    const a = document.getElementById(`gvb-${move}-atk`);
+    const d = document.getElementById(`gvb-${move}-def`);
+    if (a) a.textContent = vals.atk;
+    if (d) d.textContent = vals.def;
+  }
+
+  document.querySelectorAll('.gvb-move-btn').forEach(b => { b.disabled = false; b.classList.remove('selected', 'on-cooldown', 'faded'); });
+  gvbBattleStatus.textContent = 'Pick your move';
+  gvbBattleStatus.className = 'gvb-battle-status';
+  gvbSuddenDeathBanner.classList.add('hidden');
+  gvbRoundFlash.classList.add('hidden');
+  gvbGameOverOverlay.classList.add('hidden');
+  gvbDisconnected.classList.add('hidden');
+  gvbHistoryRows.innerHTML = '';
+  const _dmgLayer = document.getElementById('gvb-damage-numbers');
+  if (_dmgLayer) _dmgLayer.innerHTML = '';
+  gvbRoundCounter.textContent = 'Round 1 / 30';
+  resetGvbSprites();
+  startGvbBattleTimer();
+  showScreen('gvb-battle');
+}
+
+// ── GVB Rendering ─────────────────────────────────────────────────────────────
+function renderGvbBars(myHp, myArmor, oppHp, oppArmor) {
+  document.getElementById('gvb-my-hp').textContent     = myHp;
+  document.getElementById('gvb-my-armor').textContent  = myArmor;
+  document.getElementById('gvb-opp-hp').textContent    = oppHp;
+  document.getElementById('gvb-opp-armor').textContent = oppArmor;
+
+  setHpBar('gvb-my-hp-bar',  myHp,  gvbMyStats.hp);
+  setHpBar('gvb-opp-hp-bar', oppHp, gvbOppStats.hp);
+
+  // Armor break detection
+  if (_prevMyArmor !== null && _prevMyArmor > 0 && myArmor === 0) {
+    const bg = document.getElementById('gvb-my-armor-bar').closest('.gvb-bar-bg');
+    if (bg) { bg.classList.add('armor-break'); setTimeout(() => bg.classList.remove('armor-break'), 500); }
+  }
+  if (_prevOppArmor !== null && _prevOppArmor > 0 && oppArmor === 0) {
+    const bg = document.getElementById('gvb-opp-armor-bar').closest('.gvb-bar-bg');
+    if (bg) { bg.classList.add('armor-break'); setTimeout(() => bg.classList.remove('armor-break'), 500); }
+  }
+
+  setArmorBar('gvb-my-armor-bar',  myArmor,  gvbMyStats.max_armor);
+  setArmorBar('gvb-opp-armor-bar', oppArmor, gvbOppStats.max_armor);
+
+  const _myHpNum     = document.getElementById('gvb-my-hp-num');
+  const _myArmorNum  = document.getElementById('gvb-my-armor-num');
+  const _oppHpNum    = document.getElementById('gvb-opp-hp-num');
+  const _oppArmorNum = document.getElementById('gvb-opp-armor-num');
+  if (_myHpNum)     _myHpNum.textContent     = `${myHp}/${gvbMyStats.hp}`;
+  if (_myArmorNum)  _myArmorNum.textContent  = `${myArmor}/${gvbMyStats.max_armor}`;
+  if (_oppHpNum)    _oppHpNum.textContent    = `${oppHp}/${gvbOppStats.hp}`;
+  if (_oppArmorNum) _oppArmorNum.textContent = `${oppArmor}/${gvbOppStats.max_armor}`;
+
+  _prevMyArmor  = myArmor;
+  _prevOppArmor = oppArmor;
+
+  // Low HP vignette
+  const myHpPct = gvbMyStats.hp > 0 ? (myHp / gvbMyStats.hp) * 100 : 0;
+  document.querySelector('.gvb-battle-container').classList.toggle('low-hp', myHpPct > 0 && myHpPct <= 25);
+}
+
+function setHpBar(id, cur, max) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const pct = max > 0 ? (cur / max) * 100 : 0;
+  el.style.width = pct + '%';
+  el.classList.remove('medium', 'low');
+  if (pct <= 25) el.classList.add('low');
+  else if (pct <= 50) el.classList.add('medium');
+}
+
+function setArmorBar(id, cur, max) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.width = max > 0 ? (cur / max) * 100 + '%' : '0%';
+}
+
+function renderGvbStatSheet(containerId, stats) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const labels = { sword_atk: '⚔️Atk', sword_def: '⚔️Def', shield_atk: '🛡️Atk', shield_def: '🛡️Def', magic_atk: '🪄Atk', magic_def: '🪄Def' };
+  el.innerHTML = Object.entries(labels).map(([k, lbl]) =>
+    `<span class="gvb-stat-chip">${lbl} <span>${stats[k]}</span></span>`
+  ).join('');
+}
+
+function renderGvbCharges(myCharges, oppCharges) {
+  for (const move of ['sword', 'shield', 'magic']) {
+    renderChargeDisplay(`gvb-my-chg-${move}`, myCharges[move]);
+    renderChargeDisplay(`gvb-opp-chg-${move}`, oppCharges[move]);
+    const btn = document.getElementById(`gvb-btn-${move}`);
+    if (btn) {
+      const ch = myCharges[move];
+      btn.disabled = ch.cooldown > 0 || ch.count <= 0 || gvbMoveSelected || gvbGameOver;
+      btn.classList.toggle('on-cooldown', ch.cooldown > 0);
+    }
+  }
+}
+
+function renderChargeDisplay(id, charge) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (charge.cooldown > 0) {
+    el.textContent = `${charge.cooldown}t`;
+    el.className = 'gvb-charge-dots cooldown';
+  } else {
+    el.textContent = '●'.repeat(charge.count) + '○'.repeat(3 - charge.count);
+    el.className = 'gvb-charge-dots' + (charge.count === 0 ? ' depleted' : '');
+  }
+}
+
+function showGvbRoundFlash(data) {
+  const cls  = { win: 'win', loss: 'lose', tie: 'tie' };
+  const txt  = { win: 'YOU WIN', loss: 'YOU LOSE', tie: 'TIE' };
+  const { your_move, opponent_move, outcome, damage_to_you, damage_to_opp, your_hp, opp_hp } = data;
+  gvbFlashContent.innerHTML = `
+    <div class="gvb-flash-outcome ${cls[outcome]}">${txt[outcome]}</div>
+    <div class="gvb-flash-moves">
+      <span class="gvb-fm-${your_move}">${MOVE_EMOJI[your_move]}</span>
+      <span class="gvb-fm-label">You</span>
+      <span class="gvb-fm-vs">vs</span>
+      <span class="gvb-fm-label">Opp</span>
+      <span class="gvb-fm-${opponent_move}">${MOVE_EMOJI[opponent_move]}</span>
+    </div>
+    <div class="gvb-flash-damage">
+      ${damage_to_you  > 0 ? `<div>You took ${damage_to_you} → ${your_hp} HP</div>` : ''}
+      ${damage_to_opp  > 0 ? `<div>Opp took ${damage_to_opp} → ${opp_hp} HP</div>` : ''}
+      ${damage_to_you === 0 && damage_to_opp === 0 ? '<div>No damage dealt</div>' : ''}
+    </div>`;
+  gvbRoundFlash.classList.remove('hidden');
+  setTimeout(() => gvbRoundFlash.classList.add('hidden'), 3000);
+}
+
+function appendGvbHistoryRow(data) {
+  const badge = o => o === 'win'  ? '<span class="gvb-history-badge gvb-badge-win">W</span>'
+                   : o === 'loss' ? '<span class="gvb-history-badge gvb-badge-lose">L</span>'
+                   : '<span class="gvb-history-badge gvb-badge-tie">T</span>';
+  const row = document.createElement('div');
+  row.className = 'gvb-history-row';
+  row.innerHTML = `<span>#${data.round}</span><span>${MOVE_EMOJI[data.your_move]} vs ${MOVE_EMOJI[data.opponent_move]}</span>${badge(data.outcome)}`;
+  gvbHistoryRows.appendChild(row);
+}
+
+function showGvbGameOver(data) {
+  const { outcome, your_hp, opp_hp, rounds_played } = data;
+  gvbGameOver = true;
+  gvbWaitingRematch = false;
+  stopGvbBattleTimer();
+  gvbBtnPlayAgain.disabled = false;
+  gvbBtnPlayAgain.textContent = 'Play Again';
+  gvbRematchStatus.classList.add('hidden');
+  if (outcome === 'win')       { gvbResultIcon.textContent = '🏆'; gvbResultText.textContent = 'You Win!'; }
+  else if (outcome === 'loss') { gvbResultIcon.textContent = '😔'; gvbResultText.textContent = 'You Lose'; }
+  else                         { gvbResultIcon.textContent = '🤝'; gvbResultText.textContent = 'Draw!'; }
+  gvbFinalScores.innerHTML = `
+    <div class="final-score-item"><span class="fscore" style="color:var(--accent-o)">${your_hp} HP</span><span class="fname">You</span></div>
+    <div class="final-score-item"><span class="fscore" style="color:var(--accent-x)">${opp_hp} HP</span><span class="fname">${gvbOppName}</span></div>
+    <div style="font-size:0.8rem;color:var(--text-muted);margin-top:6px">${rounds_played} rounds played</div>`;
+  gvbGameOverOverlay.classList.remove('hidden');
+}
+
+// ── GVB Move Buttons ──────────────────────────────────────────────────────────
+document.querySelectorAll('.gvb-move-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (gvbMoveSelected || gvbGameOver) return;
+    const move = btn.dataset.move;
+    socket.emit('submit_move', { move });
+    gvbMoveSelected = true;
+    btn.classList.add('selected');
+    document.querySelectorAll('.gvb-move-btn').forEach(b => {
+      if (b !== btn) b.classList.add('faded');
+    });
+    document.querySelectorAll('.gvb-move-btn').forEach(b => b.disabled = true);
+    gvbBattleStatus.textContent = 'Waiting for opponent...';
+    gvbBattleStatus.className = 'gvb-battle-status waiting';
+    stopGvbBattleTimer();
+  });
+});
+
+// ── GVB Play Again ────────────────────────────────────────────────────────────
+gvbBtnPlayAgain.addEventListener('click', () => {
+  if (gvbWaitingRematch) return;
+  socket.emit('playAgain');
+  gvbWaitingRematch = true;
+  gvbBtnPlayAgain.disabled = true;
+  gvbBtnPlayAgain.textContent = 'Waiting...';
+  gvbRematchStatus.classList.remove('hidden');
+});
+
+// ── GVB Socket Events ─────────────────────────────────────────────────────────
+socket.on('room_joined', ({ players: ps }) => {
+  gameType = 'gvb';
+  players = ps;
+  initGvbAllocScreen();
+});
+
+socket.on('opponent_ready', () => {
+  gvbOpponentStatus.textContent = 'Opponent ready!';
+  gvbOpponentStatus.classList.add('ready');
+});
+
+socket.on('battle_start', (data) => {
+  gameType = 'gvb';
+  initGvbBattleScreen(data);
+});
+
+socket.on('round_result', (data) => {
+  stopGvbBattleTimer();
+  renderGvbCharges(data.your_charges, data.opp_charges);
+  gvbRoundNumber = data.round + 1;
+  const maxRound = data.is_sudden_death ? 40 : 30;
+  gvbRoundCounter.textContent = `Round ${gvbRoundNumber} / ${maxRound}`;
+  appendGvbHistoryRow(data);
+  // Short anticipation pause — both players see "Both chose!" before anything happens
+  gvbBattleStatus.textContent = 'Both chose!';
+  gvbBattleStatus.className = 'gvb-battle-status waiting';
+  setTimeout(() => {
+    // Animations fire + HP bars update together
+    triggerGvbRoundAnimations(data.outcome, data.damage_to_you, data.damage_to_opp, data.your_move, data.opponent_move);
+    renderGvbBars(data.your_hp, data.your_armor, data.opp_hp, data.opp_armor);
+    gvbBattleStatus.textContent = '';
+    gvbBattleStatus.className = 'gvb-battle-status';
+    showMoveIndicator('player', data.your_move);
+    showMoveIndicator('opp',    data.opponent_move);
+  }, 1200);
+  // Flash appears after animations have had time to play out
+  setTimeout(() => {
+    showGvbRoundFlash(data);
+    if (!data.game_over) {
+      setTimeout(() => {
+        gvbMoveSelected = false;
+        document.querySelectorAll('.gvb-move-btn').forEach(b => b.classList.remove('selected', 'faded'));
+        renderGvbCharges(data.your_charges, data.opp_charges);
+        gvbBattleStatus.textContent = 'Pick your move';
+        gvbBattleStatus.className = 'gvb-battle-status';
+        startGvbBattleTimer();
+      }, 3500);
+    }
+  }, 2500); // 1200ms anticipation + ~1300ms for animations to complete
+});
+
+socket.on('sudden_death', () => {
+  gvbSuddenDeathBanner.classList.remove('hidden');
+  document.querySelector('.gvb-arena').classList.add('sudden-death-mode');
+  document.getElementById('gvb-my-max-armor').textContent  = 0;
+  document.getElementById('gvb-opp-max-armor').textContent = 0;
+  if (gvbMyStats)  gvbMyStats.max_armor  = 0;
+  if (gvbOppStats) gvbOppStats.max_armor = 0;
+});
+
+socket.on('game_over', (data) => {
+  showGvbGameOver(data);
+});
+
+socket.on('rematch_starting', () => {
+  gvbGameOverOverlay.classList.add('hidden');
+  initGvbAllocScreen();
+});
+
+// ── GVB Sprite Animation Controller ──────────────────────────────────────────
+const _gvbSpritePlayer = document.getElementById('gvb-sprite-player');
+const _gvbSpriteOpp    = document.getElementById('gvb-sprite-opp');
+
+function _playSpriteAnim(el, cls, ms) {
+  if (!el) return;
+  el.classList.remove('sprite-attack', 'sprite-hit', 'sprite-sword', 'sprite-shield', 'sprite-magic');
+  void el.offsetWidth; // force reflow → restart animation
+  el.classList.add(cls);
+  setTimeout(() => el.classList.remove(cls), ms);
+}
+
+function triggerGvbRoundAnimations(outcome, dmgToYou, dmgToOpp, yourMove, oppMove) {
+  const myAtkCls  = `sprite-${yourMove}`;
+  const oppAtkCls = `sprite-${oppMove}`;
+
+  if (outcome === 'win') {
+    _playSpriteAnim(_gvbSpritePlayer, myAtkCls, 700);
+    spawnCombatFX('player', yourMove);
+    setTimeout(() => {
+      if (dmgToOpp > 0) {
+        _playSpriteAnim(_gvbSpriteOpp, 'sprite-hit', 800);
+        showDamageNum(dmgToOpp, 'opp');
+      }
+    }, 280);
+  } else if (outcome === 'loss') {
+    _playSpriteAnim(_gvbSpriteOpp, oppAtkCls, 700);
+    spawnCombatFX('opp', oppMove);
+    setTimeout(() => {
+      if (dmgToYou > 0) {
+        _playSpriteAnim(_gvbSpritePlayer, 'sprite-hit', 800);
+        showDamageNum(dmgToYou, 'player');
+        const _arena = document.querySelector('.gvb-arena');
+        _arena.classList.remove('shake');
+        void _arena.offsetWidth;
+        _arena.classList.add('shake');
+        setTimeout(() => _arena.classList.remove('shake'), 450);
+      }
+    }, 280);
+  } else {
+    _playSpriteAnim(_gvbSpritePlayer, myAtkCls, 700);
+    _playSpriteAnim(_gvbSpriteOpp, oppAtkCls, 700);
+    spawnCombatFX('player', yourMove);
+    spawnCombatFX('opp', oppMove);
+  }
+}
+
+function spawnCombatFX(attackerSide, move) {
+  const arena = document.querySelector('.gvb-arena');
+  if (!arena) return;
+
+  const defenderPos = attackerSide === 'player' ? 'right' : 'left';
+  const attackerPos = attackerSide === 'player' ? 'left' : 'right';
+
+  // Arena tint flash (attacker's weapon color)
+  const tint = document.createElement('div');
+  tint.className = `gvb-arena-tint gvb-tint-${move}`;
+  arena.appendChild(tint);
+  setTimeout(() => tint.remove(), 350);
+
+  if (move === 'sword') {
+    const el = document.createElement('div');
+    el.className = `gvb-fx gvb-fx-slash gvb-fx-at-${defenderPos}`;
+    arena.appendChild(el);
+    el.addEventListener('animationend', () => el.remove());
+  } else if (move === 'shield') {
+    const el = document.createElement('div');
+    el.className = `gvb-fx gvb-fx-shield-barrier gvb-fx-at-${attackerPos}`;
+    arena.appendChild(el);
+    el.addEventListener('animationend', () => el.remove());
+  } else if (move === 'magic') {
+    const el = document.createElement('div');
+    el.className = `gvb-fx gvb-fx-magic-burst gvb-fx-at-${defenderPos}`;
+    arena.appendChild(el);
+    el.addEventListener('animationend', () => el.remove());
+  }
+}
+
+function showDamageNum(value, side) {
+  const layer = document.getElementById('gvb-damage-numbers');
+  if (!layer) return;
+  const el = document.createElement('div');
+  el.className = 'gvb-damage-num' + (side === 'opp' ? ' dmg-opp' : '');
+  el.textContent = '-' + value;
+  if (side === 'player') { el.style.left = '18%'; el.style.bottom = '40%'; }
+  else                   { el.style.right = '18%'; el.style.bottom = '40%'; }
+  layer.appendChild(el);
+  setTimeout(() => el.remove(), 1200);
+}
+
+function showMoveIndicator(side, move) {
+  const layer = document.getElementById('gvb-damage-numbers');
+  if (!layer) return;
+  const el = document.createElement('div');
+  el.className = `gvb-move-indicator gvb-mi-${move}`;
+  el.textContent = MOVE_EMOJI[move];
+  if (side === 'player') { el.style.left = '10%'; }
+  else                   { el.style.right = '10%'; }
+  el.style.bottom = '85%';
+  layer.appendChild(el);
+  setTimeout(() => el.remove(), 1600);
+}
+
+function resetGvbSprites() {
+  [_gvbSpritePlayer, _gvbSpriteOpp].forEach(el => {
+    if (el) el.classList.remove('sprite-attack', 'sprite-hit', 'sprite-sword', 'sprite-shield', 'sprite-magic');
+  });
+}

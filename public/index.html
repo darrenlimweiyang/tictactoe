@@ -33,6 +33,7 @@
             <div class="game-type-btns">
               <button class="game-type-btn active" data-game="ttt">⬜ Tic-Tac-Toe</button>
               <button class="game-type-btn" data-game="sps">✌️ Scissors Paper Stone</button>
+              <button class="game-type-btn" data-game="gvb">⚔️ ScissorMe</button>
             </div>
           </div>
 
@@ -224,6 +225,252 @@
 
       <!-- Disconnected Overlay -->
       <div id="sps-disconnected" class="overlay hidden">
+        <div class="overlay-card">
+          <div class="result-icon">😞</div>
+          <h2>Opponent Disconnected</h2>
+          <p>Your opponent has left the game.</p>
+          <button onclick="location.reload()" class="btn btn-primary">Back to Lobby</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══ GVB ALLOCATION SCREEN ═══ -->
+  <div id="screen-gvb-alloc" class="screen">
+    <div class="gvb-alloc-container">
+      <div class="gvb-alloc-header">
+        <div class="room-code-badge" id="gvb-alloc-room-code">----</div>
+        <h2>Allocate Stats</h2>
+        <div id="gvb-opponent-status" class="gvb-opponent-status">Opponent allocating...</div>
+      </div>
+      <div class="gvb-alloc-timer-wrap">
+        <div class="gvb-alloc-timer-bar" id="gvb-alloc-timer-bar"></div>
+      </div>
+      <div class="gvb-points-remaining">Points remaining: <span id="gvb-points-left">10</span></div>
+      <div class="gvb-stats-grid">
+        <div class="stat-row" data-stat="hp">
+          <span class="stat-name">HP</span>
+          <button class="stat-btn minus" data-stat="hp" disabled>-</button>
+          <span class="stat-delta" id="gvb-delta-hp">0</span>
+          <button class="stat-btn plus" data-stat="hp">+</button>
+          <span class="stat-total" id="gvb-total-hp">10</span>
+        </div>
+        <div class="stat-row" data-stat="max_armor">
+          <span class="stat-name">Max Armor</span>
+          <button class="stat-btn minus" data-stat="max_armor" disabled>-</button>
+          <span class="stat-delta" id="gvb-delta-max_armor">0</span>
+          <button class="stat-btn plus" data-stat="max_armor">+</button>
+          <span class="stat-total" id="gvb-total-max_armor">5</span>
+        </div>
+        <div class="stat-row" data-stat="sword_atk">
+          <span class="stat-name">⚔️ Sword Atk</span>
+          <button class="stat-btn minus" data-stat="sword_atk" disabled>-</button>
+          <span class="stat-delta" id="gvb-delta-sword_atk">0</span>
+          <button class="stat-btn plus" data-stat="sword_atk">+</button>
+          <span class="stat-total" id="gvb-total-sword_atk">2</span>
+        </div>
+        <div class="stat-row" data-stat="sword_def">
+          <span class="stat-name">⚔️ Sword Def</span>
+          <button class="stat-btn minus" data-stat="sword_def" disabled>-</button>
+          <span class="stat-delta" id="gvb-delta-sword_def">0</span>
+          <button class="stat-btn plus" data-stat="sword_def">+</button>
+          <span class="stat-total" id="gvb-total-sword_def">0</span>
+        </div>
+        <div class="stat-row" data-stat="shield_atk">
+          <span class="stat-name">🛡️ Shield Atk</span>
+          <button class="stat-btn minus" data-stat="shield_atk" disabled>-</button>
+          <span class="stat-delta" id="gvb-delta-shield_atk">0</span>
+          <button class="stat-btn plus" data-stat="shield_atk">+</button>
+          <span class="stat-total" id="gvb-total-shield_atk">0</span>
+        </div>
+        <div class="stat-row" data-stat="shield_def">
+          <span class="stat-name">🛡️ Shield Def</span>
+          <button class="stat-btn minus" data-stat="shield_def" disabled>-</button>
+          <span class="stat-delta" id="gvb-delta-shield_def">0</span>
+          <button class="stat-btn plus" data-stat="shield_def">+</button>
+          <span class="stat-total" id="gvb-total-shield_def">2</span>
+        </div>
+        <div class="stat-row" data-stat="magic_atk">
+          <span class="stat-name">🪄 Magic Atk</span>
+          <button class="stat-btn minus" data-stat="magic_atk" disabled>-</button>
+          <span class="stat-delta" id="gvb-delta-magic_atk">0</span>
+          <button class="stat-btn plus" data-stat="magic_atk">+</button>
+          <span class="stat-total" id="gvb-total-magic_atk">1</span>
+        </div>
+        <div class="stat-row" data-stat="magic_def">
+          <span class="stat-name">🪄 Magic Def</span>
+          <button class="stat-btn minus" data-stat="magic_def" disabled>-</button>
+          <span class="stat-delta" id="gvb-delta-magic_def">0</span>
+          <button class="stat-btn plus" data-stat="magic_def">+</button>
+          <span class="stat-total" id="gvb-total-magic_def">1</span>
+        </div>
+      </div>
+      <button id="gvb-btn-ready" class="btn btn-primary" disabled>READY</button>
+    </div>
+  </div>
+
+  <!-- ═══ GVB BATTLE SCREEN ═══ -->
+  <div id="screen-gvb-battle" class="screen">
+    <div class="gvb-battle-container">
+
+      <!-- Sudden Death Banner -->
+      <div id="gvb-sudden-death-banner" class="gvb-sudden-death hidden">⚠️ SUDDEN DEATH ⚠️</div>
+
+      <!-- ZONE 1: SF2 HUD Strip -->
+      <div class="gvb-hud-strip">
+
+        <!-- Left HUD (player) -->
+        <div class="gvb-hud-left">
+          <span class="gvb-hud-name" id="gvb-my-name">YOU</span>
+          <div class="gvb-hud-bars">
+            <div class="gvb-bar-bg gvb-hp-bg">
+              <div class="gvb-hp-bar gvb-hp-rtl" id="gvb-my-hp-bar"></div>
+              <span class="gvb-bar-num" id="gvb-my-hp-num">--/--</span>
+            </div>
+            <div class="gvb-bar-bg gvb-armor-bg">
+              <div class="gvb-armor-bar gvb-armor-rtl" id="gvb-my-armor-bar"></div>
+              <span class="gvb-bar-num gvb-bar-num-sm" id="gvb-my-armor-num">--/--</span>
+            </div>
+          </div>
+          <span id="gvb-my-hp" style="display:none">10</span>
+          <span id="gvb-my-armor" style="display:none">5</span>
+          <span id="gvb-my-max-hp" style="display:none">10</span>
+          <span id="gvb-my-max-armor" style="display:none">5</span>
+        </div>
+
+        <!-- Center HUD -->
+        <div class="gvb-hud-center">
+          <div class="room-code-badge" id="gvb-battle-room-code">----</div>
+          <span class="gvb-hud-vs">VS</span>
+          <span id="gvb-round-counter" class="gvb-hud-round">Round 1 / 30</span>
+        </div>
+
+        <!-- Right HUD (opponent) -->
+        <div class="gvb-hud-right">
+          <div class="gvb-hud-bars">
+            <div class="gvb-bar-bg gvb-hp-bg">
+              <div class="gvb-hp-bar" id="gvb-opp-hp-bar"></div>
+              <span class="gvb-bar-num" id="gvb-opp-hp-num">--/--</span>
+            </div>
+            <div class="gvb-bar-bg gvb-armor-bg">
+              <div class="gvb-armor-bar" id="gvb-opp-armor-bar"></div>
+              <span class="gvb-bar-num gvb-bar-num-sm" id="gvb-opp-armor-num">--/--</span>
+            </div>
+          </div>
+          <span class="gvb-hud-name" id="gvb-opp-name">Opponent</span>
+          <span id="gvb-opp-hp" style="display:none">10</span>
+          <span id="gvb-opp-armor" style="display:none">5</span>
+          <span id="gvb-opp-max-hp" style="display:none">10</span>
+          <span id="gvb-opp-max-armor" style="display:none">5</span>
+        </div>
+
+      </div>
+
+      <!-- ZONE 2: Arena -->
+      <div class="gvb-arena">
+        <div class="gvb-sprite gvb-sprite-ken" id="gvb-sprite-player"></div>
+        <div class="gvb-sprite gvb-sprite-guile" id="gvb-sprite-opp"></div>
+        <div class="gvb-arena-timer">
+          <div class="gvb-battle-timer-bar" id="gvb-battle-timer-bar"></div>
+        </div>
+        <div class="gvb-damage-layer" id="gvb-damage-numbers"></div>
+      </div>
+
+      <!-- ZONE 3: Status row -->
+      <div class="gvb-info-row">
+        <div class="gvb-battle-status" id="gvb-battle-status">Pick your move</div>
+      </div>
+
+      <!-- ZONE 4: Controls zone -->
+      <div class="gvb-controls-zone">
+
+        <div class="gvb-panels-row">
+
+          <!-- LEFT: My stats -->
+          <div class="gvb-my-info">
+            <div class="gvb-stat-sheet" id="gvb-my-stat-sheet"></div>
+          </div>
+
+          <!-- CENTER: Move buttons -->
+          <div class="gvb-move-area" id="gvb-move-area">
+            <button class="gvb-move-btn" id="gvb-btn-sword" data-move="sword">
+              <span class="gvb-move-icon">⚔️</span>
+              <span class="gvb-move-name">Sword</span>
+              <div class="gvb-charge-dots" id="gvb-my-chg-sword">●●●</div>
+              <div class="gvb-btn-stats">
+                <div class="gvb-btn-stat">Atk <span id="gvb-sword-atk">-</span></div>
+                <div class="gvb-btn-stat">Def <span id="gvb-sword-def">-</span></div>
+              </div>
+            </button>
+            <button class="gvb-move-btn" id="gvb-btn-shield" data-move="shield">
+              <span class="gvb-move-icon">🛡️</span>
+              <span class="gvb-move-name">Shield</span>
+              <div class="gvb-charge-dots" id="gvb-my-chg-shield">●●●</div>
+              <div class="gvb-btn-stats">
+                <div class="gvb-btn-stat">Atk <span id="gvb-shield-atk">-</span></div>
+                <div class="gvb-btn-stat">Def <span id="gvb-shield-def">-</span></div>
+              </div>
+            </button>
+            <button class="gvb-move-btn" id="gvb-btn-magic" data-move="magic">
+              <span class="gvb-move-icon">🪄</span>
+              <span class="gvb-move-name">Magic</span>
+              <div class="gvb-charge-dots" id="gvb-my-chg-magic">●●●</div>
+              <div class="gvb-btn-stats">
+                <div class="gvb-btn-stat">Atk <span id="gvb-magic-atk">-</span></div>
+                <div class="gvb-btn-stat">Def <span id="gvb-magic-def">-</span></div>
+              </div>
+            </button>
+          </div>
+
+          <!-- RIGHT: Opponent info -->
+          <div class="gvb-opp-info">
+            <div class="gvb-charges-row">
+              <div class="gvb-charge-group">
+                <span class="gvb-charge-move-icon">⚔️</span>
+                <span class="gvb-charge-dots" id="gvb-opp-chg-sword">●●●</span>
+              </div>
+              <div class="gvb-charge-group">
+                <span class="gvb-charge-move-icon">🛡️</span>
+                <span class="gvb-charge-dots" id="gvb-opp-chg-shield">●●●</span>
+              </div>
+              <div class="gvb-charge-group">
+                <span class="gvb-charge-move-icon">🪄</span>
+                <span class="gvb-charge-dots" id="gvb-opp-chg-magic">●●●</span>
+              </div>
+            </div>
+            <div class="gvb-stat-sheet" id="gvb-opp-stat-sheet"></div>
+          </div>
+
+        </div><!-- /.gvb-panels-row -->
+
+        <!-- History strip — horizontal, below panels -->
+        <div class="gvb-history">
+          <div class="history-label">History</div>
+          <div id="gvb-history-rows"></div>
+        </div>
+
+      </div><!-- /.gvb-controls-zone -->
+
+      <!-- Round Result Flash -->
+      <div id="gvb-round-flash" class="gvb-round-flash hidden">
+        <div class="gvb-flash-content" id="gvb-flash-content"></div>
+      </div>
+
+      <!-- Game Over Overlay -->
+      <div id="gvb-game-over-overlay" class="overlay hidden">
+        <div class="overlay-card">
+          <div class="result-icon" id="gvb-result-icon"></div>
+          <h2 id="gvb-result-text">Game Over</h2>
+          <div class="final-scores" id="gvb-final-scores"></div>
+          <button id="gvb-btn-play-again" class="btn btn-primary">Play Again</button>
+          <p id="gvb-rematch-status" class="hint hidden">Waiting for opponent...</p>
+          <button onclick="location.reload()" class="btn btn-secondary" style="margin-top:8px">Back to Lobby</button>
+        </div>
+      </div>
+
+      <!-- Disconnected Overlay -->
+      <div id="gvb-disconnected" class="overlay hidden">
         <div class="overlay-card">
           <div class="result-icon">😞</div>
           <h2>Opponent Disconnected</h2>
