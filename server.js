@@ -164,16 +164,252 @@ function startSpsRound(room) {
   }, 10000);
 }
 
+// ── GVB (Gigaverse Battle) logic ──────────────────────────────────────────────
+const GVB_BASE = {
+  hp: 10, max_armor: 5,
+  sword_atk: 2, sword_def: 0,
+  shield_atk: 0, shield_def: 2,
+  magic_atk: 1, magic_def: 1,
+};
+
+// 'win' = m1 beats m2, 'loss' = m1 loses, 'tie' = same
+function gvbOutcome(m1, m2) {
+  if (m1 === m2) return 'tie';
+  if ((m1 === 'sword' && m2 === 'magic') ||
+      (m1 === 'shield' && m2 === 'sword') ||
+      (m1 === 'magic' && m2 === 'shield')) return 'win';
+  return 'loss';
+}
+
+function gvbDealDamage(room, targetId, amount) {
+  if (amount <= 0) return;
+  const armorAbsorb = Math.min(room.armor[targetId], amount);
+  room.armor[targetId] -= armorAbsorb;
+  room.hp[targetId] = Math.max(0, room.hp[targetId] - (amount - armorAbsorb));
+}
+
+// Called after round resolves. usedMove is the move the player chose this round.
+function gvbUpdateCharges(playerCharges, usedMove) {
+  for (const move of ['sword', 'shield', 'magic']) {
+    const ch = playerCharges[move];
+    if (move === usedMove) {
+      // Count was decremented on selection — check if now 0
+      if (ch.count === 0 && ch.cooldown === 0) ch.cooldown = 2;
+      // Used move does not recharge this round
+    } else if (ch.cooldown > 0) {
+      ch.cooldown -= 1;
+      if (ch.cooldown === 0) ch.count = 1; // available again with 1 charge
+    } else {
+      ch.count = Math.min(3, ch.count + 1); // recharge unused move
+    }
+  }
+}
+
+function validateAllocation(deltas) {
+  const keys = ['hp', 'max_armor', 'sword_atk', 'sword_def', 'shield_atk', 'shield_def', 'magic_atk', 'magic_def'];
+  if (keys.some(k => (deltas[k] || 0) < 0)) return false;
+  return keys.reduce((acc, k) => acc + (deltas[k] || 0), 0) === 10;
+}
+
+function autoDistributeRemaining(deltas) {
+  const keys = ['hp', 'max_armor', 'sword_atk', 'sword_def', 'shield_atk', 'shield_def', 'magic_atk', 'magic_def'];
+  let remaining = 10 - keys.reduce((acc, k) => acc + (deltas[k] || 0), 0);
+  if (remaining <= 0) return deltas;
+  const result = { ...deltas };
+  const toArmor = Math.floor(remaining / 2);
+  result.max_armor = (result.max_armor || 0) + toArmor;
+  result.hp = (result.hp || 0) + (remaining - toArmor);
+  return result;
+}
+
+function buildStats(deltas) {
+  return {
+    hp:         GVB_BASE.hp         + (deltas.hp         || 0),
+    max_armor:  GVB_BASE.max_armor  + (deltas.max_armor  || 0),
+    sword_atk:  GVB_BASE.sword_atk  + (deltas.sword_atk  || 0),
+    sword_def:  GVB_BASE.sword_def  + (deltas.sword_def  || 0),
+    shield_atk: GVB_BASE.shield_atk + (deltas.shield_atk || 0),
+    shield_def: GVB_BASE.shield_def + (deltas.shield_def || 0),
+    magic_atk:  GVB_BASE.magic_atk  + (deltas.magic_atk  || 0),
+    magic_def:  GVB_BASE.magic_def  + (deltas.magic_def  || 0),
+  };
+}
+
+function initCharges() {
+  return {
+    sword:  { count: 3, cooldown: 0 },
+    shield: { count: 3, cooldown: 0 },
+    magic:  { count: 3, cooldown: 0 },
+  };
+}
+
+function randomAvailableMove(playerCharges) {
+  const available = ['sword', 'shield', 'magic'].filter(
+    m => playerCharges[m].count > 0 && playerCharges[m].cooldown === 0
+  );
+  if (!available.length) return null;
+  return available[Math.floor(Math.random() * available.length)];
+}
+
+function startGvbBattle(room) {
+  if (room.allocationTimer) { clearTimeout(room.allocationTimer); room.allocationTimer = null; }
+  room.status = 'battle';
+  const [p1, p2] = room.players;
+  room.hp[p1.id]     = p1.stats.hp;     room.armor[p1.id] = p1.stats.max_armor;
+  room.hp[p2.id]     = p2.stats.hp;     room.armor[p2.id] = p2.stats.max_armor;
+  room.charges[p1.id] = initCharges();
+  room.charges[p2.id] = initCharges();
+  io.to(p1.id).emit('battle_start', { your_stats: p1.stats, opponent_stats: p2.stats, opponent_name: p2.name, your_charges: room.charges[p1.id], opp_charges: room.charges[p2.id] });
+  io.to(p2.id).emit('battle_start', { your_stats: p2.stats, opponent_stats: p1.stats, opponent_name: p1.name, your_charges: room.charges[p2.id], opp_charges: room.charges[p1.id] });
+  startGvbTurnTimer(room);
+}
+
+function startGvbTurnTimer(room) {
+  if (room.turnTimer) { clearTimeout(room.turnTimer); room.turnTimer = null; }
+  room.turnTimer = setTimeout(() => {
+    room.turnTimer = null;
+    for (const player of room.players) {
+      if (!room.choices[player.id]) {
+        const move = randomAvailableMove(room.charges[player.id]);
+        if (move) {
+          room.charges[player.id][move].count -= 1;
+          room.choices[player.id] = move;
+        }
+      }
+    }
+    resolveGvbRound(room);
+  }, 30000);
+}
+
+function resolveGvbRound(room) {
+  if (room.turnTimer) { clearTimeout(room.turnTimer); room.turnTimer = null; }
+  const [p1, p2] = room.players;
+  const m1 = room.choices[p1.id];
+  const m2 = room.choices[p2.id];
+  const outcome = gvbOutcome(m1, m2); // p1's perspective
+
+  function ms(stats, move) {
+    return { atk: stats[`${move}_atk`], def: room.suddenDeath ? 0 : stats[`${move}_def`] };
+  }
+
+  const p1ms = ms(p1.stats, m1);
+  const p2ms = ms(p2.stats, m2);
+  let dmgToP1 = 0, dmgToP2 = 0, restoreP1 = 0, restoreP2 = 0;
+
+  if (outcome === 'tie') {
+    restoreP1 = p1ms.def; restoreP2 = p2ms.def;
+    dmgToP1 = p2ms.atk;  dmgToP2 = p1ms.atk;
+  } else if (outcome === 'win') {
+    restoreP1 = p1ms.def; dmgToP2 = p1ms.atk;
+  } else {
+    restoreP2 = p2ms.def; dmgToP1 = p2ms.atk;
+  }
+
+  // Restore armor first (matters for ties), then apply damage
+  if (restoreP1 > 0) room.armor[p1.id] = Math.min(p1.stats.max_armor, room.armor[p1.id] + restoreP1);
+  if (restoreP2 > 0) room.armor[p2.id] = Math.min(p2.stats.max_armor, room.armor[p2.id] + restoreP2);
+  gvbDealDamage(room, p1.id, dmgToP1);
+  gvbDealDamage(room, p2.id, dmgToP2);
+
+  gvbUpdateCharges(room.charges[p1.id], m1);
+  gvbUpdateCharges(room.charges[p2.id], m2);
+
+  const resolvedRound = room.roundNumber;
+  room.roundHistory.push({ roundNum: resolvedRound, moves: { [p1.id]: m1, [p2.id]: m2 }, outcome, dmgToP1, dmgToP2, hpAfter: { [p1.id]: room.hp[p1.id], [p2.id]: room.hp[p2.id] }, armorAfter: { [p1.id]: room.armor[p1.id], [p2.id]: room.armor[p2.id] } });
+  if (room.roundHistory.length > 10) room.roundHistory.shift();
+  room.roundNumber += 1;
+  room.choices = {};
+
+  // Check HP
+  const p1dead = room.hp[p1.id] <= 0;
+  const p2dead = room.hp[p2.id] <= 0;
+  let gameOver = p1dead || p2dead;
+  let winnerId = null, reason = null;
+  if (gameOver) {
+    if (p1dead && p2dead) { winnerId = 'draw'; reason = 'draw'; }
+    else if (p1dead)      { winnerId = p2.id;  reason = 'hp_zero'; }
+    else                  { winnerId = p1.id;  reason = 'hp_zero'; }
+  }
+
+  // Sudden death trigger after round 30
+  let triggerSuddenDeath = false;
+  if (!gameOver && !room.suddenDeath && resolvedRound >= 30) {
+    room.suddenDeath = true;
+    room.armor[p1.id] = 0; room.armor[p2.id] = 0;
+    p1.stats.max_armor = 0; p2.stats.max_armor = 0;
+    triggerSuddenDeath = true;
+  }
+
+  // Sudden death timeout after round 40
+  if (!gameOver && room.suddenDeath && resolvedRound >= 40) {
+    gameOver = true;
+    if      (room.hp[p1.id] > room.hp[p2.id]) { winnerId = p1.id;   reason = 'sudden_death_hp'; }
+    else if (room.hp[p2.id] > room.hp[p1.id]) { winnerId = p2.id;   reason = 'sudden_death_hp'; }
+    else                                        { winnerId = 'draw';  reason = 'sudden_death_timeout'; }
+  }
+
+  if (gameOver) room.status = 'over';
+
+  // Emit personalized round_result to each player
+  for (const player of room.players) {
+    const opp = room.players.find(p => p.id !== player.id);
+    const isP1 = player.id === p1.id;
+    const myMove    = isP1 ? m1 : m2;
+    const oppMove   = isP1 ? m2 : m1;
+    const myOutcome = isP1 ? outcome : (outcome === 'win' ? 'loss' : outcome === 'loss' ? 'win' : 'tie');
+    const dmgToMe   = isP1 ? dmgToP1 : dmgToP2;
+    const dmgToOpp  = isP1 ? dmgToP2 : dmgToP1;
+    io.to(player.id).emit('round_result', {
+      round: resolvedRound, your_move: myMove, opponent_move: oppMove, outcome: myOutcome,
+      damage_to_you: dmgToMe, damage_to_opp: dmgToOpp,
+      your_hp: room.hp[player.id], your_armor: room.armor[player.id],
+      opp_hp: room.hp[opp.id],     opp_armor: room.armor[opp.id],
+      your_charges: room.charges[player.id], opp_charges: room.charges[opp.id],
+      is_sudden_death: triggerSuddenDeath, game_over: gameOver,
+    });
+  }
+
+  if (gameOver) {
+    setTimeout(() => {
+      for (const player of room.players) {
+        const opp = room.players.find(p => p.id !== player.id);
+        const myOutcome = winnerId === 'draw' ? 'draw' : winnerId === player.id ? 'win' : 'loss';
+        io.to(player.id).emit('game_over', { outcome: myOutcome, reason, your_hp: room.hp[player.id], opp_hp: room.hp[opp.id], rounds_played: resolvedRound });
+      }
+    }, 3000);
+  } else if (triggerSuddenDeath) {
+    setTimeout(() => {
+      if (rooms.get(room.code) === room && room.status === 'battle') {
+        io.to(room.code).emit('sudden_death', {});
+        startGvbTurnTimer(room);
+      }
+    }, 4000);
+  } else {
+    setTimeout(() => {
+      if (rooms.get(room.code) === room && room.status === 'battle') startGvbTurnTimer(room);
+    }, 4000);
+  }
+}
+
 // ── Socket handlers ───────────────────────────────────────────────────────────
 io.on('connection', (socket) => {
   console.log(`Player connected: ${socket.id}`);
 
   socket.on('createRoom', ({ name, gridSize, gameType, bestOf }) => {
     const code = generateRoomCode();
-    const type = gameType === 'sps' ? 'sps' : 'ttt';
+    const type = gameType === 'sps' ? 'sps' : gameType === 'gvb' ? 'gvb' : 'ttt';
     let room;
 
-    if (type === 'ttt') {
+    if (type === 'gvb') {
+      room = {
+        code, gameType: 'gvb',
+        players: [{ id: socket.id, name: name || 'Player 1', stats: null }],
+        status: 'waiting', allocationTimer: null, turnTimer: null,
+        choices: {}, hp: {}, armor: {}, charges: {},
+        roundNumber: 1, suddenDeath: false, roundHistory: [], rematchVotes: new Set(),
+      };
+      socket.emit('roomCreated', { code, gameType: 'gvb' });
+    } else if (type === 'ttt') {
       const validSizes = [3, 4, 5];
       const size = validSizes.includes(gridSize) ? gridSize : 3;
       room = {
@@ -222,7 +458,7 @@ io.on('connection', (socket) => {
         board: room.board, currentTurn: room.currentTurn,
         players: room.players, gridSize: room.gridSize, scores: room.scores,
       });
-    } else {
+    } else if (room.gameType === 'sps') {
       room.players.push({ id: socket.id, name: name || 'Player 2' });
       room.scores[socket.id] = 0;
       room.status = 'playing';
@@ -232,6 +468,18 @@ io.on('connection', (socket) => {
         roundHistory: [],
       });
       setTimeout(() => startSpsRound(room), 1200);
+    } else if (room.gameType === 'gvb') {
+      room.players.push({ id: socket.id, name: name || 'Player 2', stats: null });
+      room.status = 'allocating';
+      io.to(room.code).emit('room_joined', { players: room.players });
+      // 60s allocation timer — auto-distribute for anyone who hasn't submitted
+      room.allocationTimer = setTimeout(() => {
+        room.allocationTimer = null;
+        for (const player of room.players) {
+          if (!player.stats) player.stats = buildStats(autoDistributeRemaining({}));
+        }
+        if (rooms.get(room.code) === room && room.status === 'allocating') startGvbBattle(room);
+      }, 60000);
     }
     console.log(`${name} joined room ${code}`);
   });
@@ -282,6 +530,40 @@ io.on('connection', (socket) => {
     }
   });
 
+  // GVB allocation submission
+  socket.on('submit_allocation', (deltas) => {
+    const code = socket.data.roomCode;
+    const room = rooms.get(code);
+    if (!room || room.gameType !== 'gvb' || room.status !== 'allocating') return;
+    const player = room.players.find(p => p.id === socket.id);
+    if (!player || player.stats) return; // already submitted
+    if (!validateAllocation(deltas)) { socket.emit('error', { message: 'Invalid allocation. Must spend exactly 10 points, all ≥ 0.' }); return; }
+    player.stats = buildStats(deltas);
+    socket.to(code).emit('opponent_ready', {});
+    if (room.players.every(p => p.stats)) startGvbBattle(room);
+  });
+
+  // GVB move submission
+  socket.on('submit_move', ({ move }) => {
+    const code = socket.data.roomCode;
+    const room = rooms.get(code);
+    if (!room || room.gameType !== 'gvb' || room.status !== 'battle') return;
+    if (room.choices[socket.id]) return; // already submitted
+    const playerCharges = room.charges[socket.id];
+    if (!playerCharges) return;
+    let selectedMove = move;
+    // Validate move is available; if not, auto-select
+    if (!['sword', 'shield', 'magic'].includes(selectedMove) ||
+        playerCharges[selectedMove].cooldown > 0 || playerCharges[selectedMove].count <= 0) {
+      selectedMove = randomAvailableMove(playerCharges);
+      if (!selectedMove) return;
+    }
+    room.charges[socket.id][selectedMove].count -= 1; // consume charge on selection
+    room.choices[socket.id] = selectedMove;
+    socket.to(code).emit('opponent_chose', {});
+    if (room.players.every(p => room.choices[p.id])) resolveGvbRound(room);
+  });
+
   socket.on('playAgain', () => {
     const code = socket.data.roomCode;
     const room = rooms.get(code);
@@ -302,7 +584,7 @@ io.on('connection', (socket) => {
           board: room.board, currentTurn: room.currentTurn,
           players: room.players, scores: room.scores, gridSize: room.gridSize,
         });
-      } else {
+      } else if (room.gameType === 'sps') {
         room.scores = {};
         room.players.forEach(p => { room.scores[p.id] = 0; });
         room.roundNumber = 1;
@@ -313,6 +595,19 @@ io.on('connection', (socket) => {
           bestOf: room.bestOf, roundNumber: 1, roundHistory: [],
         });
         setTimeout(() => startSpsRound(room), 1200);
+      } else if (room.gameType === 'gvb') {
+        room.players.forEach(p => { p.stats = null; });
+        room.hp = {}; room.armor = {}; room.charges = {};
+        room.choices = {}; room.roundNumber = 1; room.suddenDeath = false; room.roundHistory = [];
+        room.status = 'allocating';
+        io.to(code).emit('rematch_starting', {});
+        room.allocationTimer = setTimeout(() => {
+          room.allocationTimer = null;
+          for (const player of room.players) {
+            if (!player.stats) player.stats = buildStats(autoDistributeRemaining({}));
+          }
+          if (rooms.get(room.code) === room && room.status === 'allocating') startGvbBattle(room);
+        }, 60000);
       }
     } else {
       socket.to(code).emit('opponentWantsRematch');
@@ -324,6 +619,8 @@ io.on('connection', (socket) => {
     const room = rooms.get(code);
     if (!room) return;
     if (room.roundTimer) clearTimeout(room.roundTimer);
+    if (room.allocationTimer) clearTimeout(room.allocationTimer);
+    if (room.turnTimer) clearTimeout(room.turnTimer);
     console.log(`Player ${socket.id} disconnected from room ${code}`);
     socket.to(code).emit('opponentDisconnected');
     rooms.delete(code);
