@@ -1228,11 +1228,11 @@ function showMoveIndicator(side, move) {
   const el = document.createElement('div');
   el.className = `gvb-move-indicator gvb-mi-${move}`;
   el.textContent = MOVE_EMOJI[move];
-  if (side === 'player') { el.style.left = '10%'; }
-  else                   { el.style.right = '10%'; }
-  el.style.bottom = '85%';
+  if (side === 'player') { el.style.left = '28%'; }
+  else                   { el.style.right = '28%'; }
+  el.style.bottom = '55%';
   layer.appendChild(el);
-  setTimeout(() => el.remove(), 1600);
+  setTimeout(() => el.remove(), 3000);
 }
 
 function resetGvbSprites() {

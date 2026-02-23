@@ -1052,14 +1052,14 @@ input[type="text"]:focus {
   align-items: center;
   justify-content: center;
   font-family: 'Press Start 2P', monospace;
-  font-size: 0.42rem;
+  font-size: 0.504rem;
   color: rgba(255,255,255,0.9);
   text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.7);
   pointer-events: none;
   z-index: 2;
   white-space: nowrap;
 }
-.gvb-bar-num-sm { font-size: 0.32rem; }
+.gvb-bar-num-sm { font-size: 0.384rem; }
 
 /* HP bar — fills left-to-right (opponent default) */
 .gvb-hp-bar {
@@ -1343,7 +1343,7 @@ input[type="text"]:focus {
 }
 .gvb-battle-status {
   font-family: 'Press Start 2P', monospace;
-  font-size: 0.48rem;
+  font-size: 0.576rem;
   color: var(--text-muted);
   text-align: center;
 }
@@ -1527,8 +1527,8 @@ input[type="text"]:focus {
   border-color: var(--accent-x);
   opacity: 0.35;
 }
-.gvb-move-icon { font-size: clamp(2rem, 4.5vh, 3.2rem); line-height: 1; }
-.gvb-move-name { font-size: 0.72rem; color: var(--text-muted); letter-spacing: 0.5px; }
+.gvb-move-icon { font-size: clamp(2.4rem, 5.4vh, 3.84rem); line-height: 1; }
+.gvb-move-name { font-size: 0.864rem; color: var(--text-muted); letter-spacing: 0.5px; }
 .gvb-move-btn .gvb-charge-dots { font-size: 0.9rem; letter-spacing: 3px; }
 
 /* NEW: stats display inside buttons */
@@ -1611,16 +1611,16 @@ input[type="text"]:focus {
 }
 .gvb-flash-outcome {
   font-family: 'Press Start 2P', monospace;
-  font-size: 1.1rem;
+  font-size: 1.32rem;
   margin-bottom: 10px;
 }
 .gvb-flash-outcome.win  { color: var(--green);    text-shadow: 0 0 14px var(--glow-g); }
 .gvb-flash-outcome.lose { color: var(--accent-x); text-shadow: 0 0 14px var(--glow-x); }
 .gvb-flash-outcome.tie  { color: var(--gold);     text-shadow: 0 0 14px var(--gold); }
-.gvb-flash-moves { font-size: 1.6rem; color: var(--text-muted); margin-bottom: 12px; letter-spacing: 0.15em; }
+.gvb-flash-moves { font-size: 1.92rem; color: var(--text-muted); margin-bottom: 12px; letter-spacing: 0.15em; }
 .gvb-flash-damage {
   font-family: 'Press Start 2P', monospace;
-  font-size: 0.65rem;
+  font-size: 0.78rem;
   color: var(--text);
   line-height: 2.0;
 }
@@ -1635,7 +1635,7 @@ input[type="text"]:focus {
 .gvb-damage-num {
   position: absolute;
   font-family: 'Press Start 2P', monospace;
-  font-size: calc(var(--s) * 18px);
+  font-size: calc(var(--s) * 21.6px);
   color: #ff3344;
   text-shadow: 0 0 12px currentColor, 0 3px 0 #000, 0 0 24px currentColor;
   font-weight: 900;
@@ -1653,8 +1653,8 @@ input[type="text"]:focus {
 /* ── Floating move indicators ── */
 .gvb-move-indicator {
   position: absolute;
-  font-size: calc(var(--s) * 13px);
-  animation: moveIndicatorFloat 1.6s ease-out forwards;
+  font-size: calc(var(--s) * 15.6px);
+  animation: moveIndicatorFloat 3s ease-out forwards;
   pointer-events: none;
   z-index: 11;
 }
@@ -1662,10 +1662,10 @@ input[type="text"]:focus {
 .gvb-mi-shield { filter: drop-shadow(0 0 8px #44aaff) drop-shadow(0 0 16px #0088ff); }
 .gvb-mi-magic  { filter: drop-shadow(0 0 8px #cc44ff) drop-shadow(0 0 16px #8800ff); }
 @keyframes moveIndicatorFloat {
-  0%   { opacity: 0; transform: scale(0.4) translateY(0); }
-  20%  { opacity: 1; transform: scale(1.6) translateY(-20px); }
-  60%  { opacity: 1; transform: scale(1.3) translateY(-50px); }
-  100% { opacity: 0; transform: scale(1.1) translateY(-90px); }
+  0%   { opacity: 0; transform: scale(0.4); }
+  12%  { opacity: 1; transform: scale(1.6); }
+  75%  { opacity: 1; transform: scale(1.4); }
+  100% { opacity: 0; transform: scale(1.2); }
 }
 
 /* ── Arena shake on taking damage ── */
