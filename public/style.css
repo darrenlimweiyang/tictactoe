@@ -1042,8 +1042,8 @@ input[type="text"]:focus {
   overflow: hidden;
   border: 1px solid #2a1a3a;
 }
-.gvb-hp-bg    { height: clamp(16px, 2.5vh, 26px); background: #160808; }
-.gvb-armor-bg { height: clamp(10px, 1.5vh, 18px);  background: #081016; }
+.gvb-hp-bg    { height: clamp(22px, 3.5vh, 34px); background: #160808; }
+.gvb-armor-bg { height: clamp(14px, 2.2vh, 24px);  background: #081016; }
 
 .gvb-bar-num {
   position: absolute;
@@ -1052,14 +1052,14 @@ input[type="text"]:focus {
   align-items: center;
   justify-content: center;
   font-family: 'Press Start 2P', monospace;
-  font-size: 0.504rem;
+  font-size: 0.72rem;
   color: rgba(255,255,255,0.9);
   text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.7);
   pointer-events: none;
   z-index: 2;
   white-space: nowrap;
 }
-.gvb-bar-num-sm { font-size: 0.384rem; }
+.gvb-bar-num-sm { font-size: 0.55rem; }
 
 /* HP bar — fills left-to-right (opponent default) */
 .gvb-hp-bar {
@@ -1423,10 +1423,10 @@ input[type="text"]:focus {
   align-items: center;
   gap: 3px;
 }
-.gvb-charge-move-icon { font-size: 0.9rem; }
+.gvb-charge-move-icon { font-size: 1.2rem; }
 .gvb-charge-dots {
   font-family: 'Press Start 2P', monospace;
-  font-size: 1.0rem;
+  font-size: 1.4rem;
   color: var(--gold);
   letter-spacing: 2px;
 }
@@ -1529,7 +1529,7 @@ input[type="text"]:focus {
 }
 .gvb-move-icon { font-size: clamp(2.4rem, 5.4vh, 3.84rem); line-height: 1; }
 .gvb-move-name { font-size: 0.864rem; color: var(--text-muted); letter-spacing: 0.5px; }
-.gvb-move-btn .gvb-charge-dots { font-size: 0.9rem; letter-spacing: 3px; }
+.gvb-move-btn .gvb-charge-dots { font-size: 1.2rem; letter-spacing: 3px; }
 
 /* NEW: stats display inside buttons */
 .gvb-btn-stats {
@@ -1704,15 +1704,6 @@ input[type="text"]:focus {
   8%   { transform: rotate(-50deg) scaleX(1.5); opacity: 1; }
   70%  { transform: rotate(-35deg) scaleX(1.3); opacity: 0.9; }
   100% { transform: rotate(-20deg) scaleX(0.5); opacity: 0; }
-}
-.gvb-fx-slash::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: inherit;
-  transform: rotate(80deg);
-  transform-origin: left center;
-  opacity: 0.5;
 }
 
 /* Shield barrier — expanding ring */
