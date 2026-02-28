@@ -19,6 +19,9 @@ let spsRound = 1;
 let myChoice = null;
 let spsMatchOver = false;
 let spsWaitingRematch = false;
+let spsIsAiGame = false;
+let tttIsAiGame = false;
+let gvbIsAiGame = false;
 let roundHistory = [];
 let timerRafId = null;
 let timerStart = null;
@@ -96,6 +99,8 @@ document.querySelectorAll('.game-type-btn').forEach(btn => {
     document.querySelectorAll('.game-type-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     selectedGameType = btn.dataset.game;
+    const aiBtn = document.getElementById('btn-play-vs-ai');
+    aiBtn.classList.remove('hidden');
     if (selectedGameType === 'sps') {
       gridSizeSection.classList.add('hidden');
       bestofSection.classList.remove('hidden');
@@ -137,6 +142,11 @@ document.getElementById('btn-create').addEventListener('click', () => {
   });
 });
 
+document.getElementById('btn-play-vs-ai').addEventListener('click', () => {
+  const name = playerNameInput.value.trim() || 'Player 1';
+  socket.emit('createAiRoom', { name, gameType: selectedGameType, gridSize: selectedGridSize, bestOf: selectedBestOf });
+});
+
 document.getElementById('btn-join').addEventListener('click', () => {
   const name = playerNameInput.value.trim() || 'Player 2';
   const code = roomCodeInput.value.trim().toUpperCase();
@@ -152,20 +162,24 @@ roomCodeInput.addEventListener('keydown', e => {
 btnPlayAgain.addEventListener('click', () => {
   if (tttWaitingRematch) return;
   socket.emit('playAgain');
-  tttWaitingRematch = true;
-  btnPlayAgain.disabled = true;
-  btnPlayAgain.textContent = 'Waiting...';
-  rematchStatus.classList.remove('hidden');
+  if (!tttIsAiGame) {
+    tttWaitingRematch = true;
+    btnPlayAgain.disabled = true;
+    btnPlayAgain.textContent = 'Waiting...';
+    rematchStatus.classList.remove('hidden');
+  }
 });
 
 // SPS play again
 spsBtnPlayAgain.addEventListener('click', () => {
   if (spsWaitingRematch) return;
   socket.emit('playAgain');
-  spsWaitingRematch = true;
-  spsBtnPlayAgain.disabled = true;
-  spsBtnPlayAgain.textContent = 'Waiting...';
-  spsRematchStatus.classList.remove('hidden');
+  if (!spsIsAiGame) {
+    spsWaitingRematch = true;
+    spsBtnPlayAgain.disabled = true;
+    spsBtnPlayAgain.textContent = 'Waiting...';
+    spsRematchStatus.classList.remove('hidden');
+  }
 });
 
 // Choice buttons
@@ -550,8 +564,8 @@ function initSpsScreen(data) {
   spsWaitingRematch = false;
   myChoice = null;
 
-  const code = getRoomCode();
-  spsRoomCode.textContent = code;
+  spsIsAiGame = players.some(p => p.id === 'AI');
+  spsRoomCode.textContent = spsIsAiGame ? 'VS CPU' : getRoomCode();
   bestofBar.textContent = `Best of ${bestOf}`;
   spsMatchOverEl.classList.add('hidden');
   spsDisconnected.classList.add('hidden');
@@ -593,11 +607,13 @@ socket.on('gameStart', (data) => {
   gridSize    = data.gridSize;
   currentTurn = data.currentTurn;
   tttGameOver = false;
+  tttIsAiGame = players.some(p => p.id === 'AI');
   mySymbol = players.find(p => p.id === myId)?.symbol;
   gameOverOverlay.classList.add('hidden');
   disconnOverlay.classList.add('hidden');
   const code = getRoomCode();
   if (code) gameRoomCode.textContent = code;
+  if (tttIsAiGame) gameRoomCode.textContent = 'VS CPU';
   updateTttScoreBar();
   updateTurnIndicator();
   renderBoard(data.board);
@@ -826,7 +842,7 @@ function stopGvbBattleTimer() {
 // ── GVB Screen Init ───────────────────────────────────────────────────────────
 function initGvbAllocScreen() {
   resetAllocDeltas();
-  gvbAllocRoomCode.textContent = displayRoomCode.textContent;
+  gvbAllocRoomCode.textContent = gvbIsAiGame ? 'VS CPU' : displayRoomCode.textContent;
   gvbOpponentStatus.textContent = 'Opponent allocating...';
   gvbOpponentStatus.classList.remove('ready');
   gvbBtnReady.disabled = true;
@@ -851,7 +867,7 @@ function initGvbBattleScreen(data) {
   document.querySelector('.gvb-battle-container').classList.remove('low-hp');
   stopGvbAllocTimer();
 
-  gvbBattleRoomCode.textContent = displayRoomCode.textContent;
+  gvbBattleRoomCode.textContent = gvbIsAiGame ? 'VS CPU' : displayRoomCode.textContent;
   gvbOppNameEl.textContent = opponent_name;
   const _myNameEl = document.getElementById('gvb-my-name');
   if (_myNameEl) _myNameEl.textContent = playerNameInput.value || 'YOU';
@@ -1056,16 +1072,19 @@ document.querySelectorAll('.gvb-move-btn').forEach(btn => {
 gvbBtnPlayAgain.addEventListener('click', () => {
   if (gvbWaitingRematch) return;
   socket.emit('playAgain');
-  gvbWaitingRematch = true;
-  gvbBtnPlayAgain.disabled = true;
-  gvbBtnPlayAgain.textContent = 'Waiting...';
-  gvbRematchStatus.classList.remove('hidden');
+  if (!gvbIsAiGame) {
+    gvbWaitingRematch = true;
+    gvbBtnPlayAgain.disabled = true;
+    gvbBtnPlayAgain.textContent = 'Waiting...';
+    gvbRematchStatus.classList.remove('hidden');
+  }
 });
 
 // ── GVB Socket Events ─────────────────────────────────────────────────────────
 socket.on('room_joined', ({ players: ps }) => {
   gameType = 'gvb';
   players = ps;
+  gvbIsAiGame = players.some(p => p.id === 'AI');
   initGvbAllocScreen();
 });
 
@@ -1076,6 +1095,7 @@ socket.on('opponent_ready', () => {
 
 socket.on('battle_start', (data) => {
   gameType = 'gvb';
+  // gvbIsAiGame is already set from room_joined; don't overwrite
   initGvbBattleScreen(data);
 });
 

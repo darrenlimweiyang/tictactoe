@@ -59,6 +59,152 @@ function isDraw(board) {
   return board.every(cell => cell !== null);
 }
 
+// ── TTT AI (minimax) ─────────────────────────────────────────────────────────
+function tttAiMove(board, gridSize, aiSymbol) {
+  const oppSymbol = aiSymbol === 'X' ? 'O' : 'X';
+  const emptyCells = [];
+  for (let i = 0; i < board.length; i++) {
+    if (board[i] === null) emptyCells.push(i);
+  }
+  if (emptyCells.length === 0) return -1;
+
+  if (gridSize === 3) {
+    // Full minimax with alpha-beta pruning — perfect play
+    return tttMinimaxFull(board, gridSize, aiSymbol, oppSymbol);
+  } else {
+    // Depth-limited minimax with heuristic eval for 4x4/5x5
+    return tttMinimaxLimited(board, gridSize, aiSymbol, oppSymbol, 5);
+  }
+}
+
+function tttMinimaxFull(board, N, aiSymbol, oppSymbol) {
+  let bestScore = -Infinity;
+  let bestMove = -1;
+
+  for (let i = 0; i < board.length; i++) {
+    if (board[i] !== null) continue;
+    board[i] = aiSymbol;
+    const score = minimaxFull(board, N, false, aiSymbol, oppSymbol, -Infinity, Infinity);
+    board[i] = null;
+    if (score > bestScore) { bestScore = score; bestMove = i; }
+  }
+  return bestMove;
+}
+
+function minimaxFull(board, N, isMaximizing, aiSymbol, oppSymbol, alpha, beta) {
+  const winner = checkWin(board, N);
+  if (winner === aiSymbol) return 10;
+  if (winner === oppSymbol) return -10;
+  if (isDraw(board)) return 0;
+
+  if (isMaximizing) {
+    let best = -Infinity;
+    for (let i = 0; i < board.length; i++) {
+      if (board[i] !== null) continue;
+      board[i] = aiSymbol;
+      best = Math.max(best, minimaxFull(board, N, false, aiSymbol, oppSymbol, alpha, beta));
+      board[i] = null;
+      alpha = Math.max(alpha, best);
+      if (beta <= alpha) break;
+    }
+    return best;
+  } else {
+    let best = Infinity;
+    for (let i = 0; i < board.length; i++) {
+      if (board[i] !== null) continue;
+      board[i] = oppSymbol;
+      best = Math.min(best, minimaxFull(board, N, true, aiSymbol, oppSymbol, alpha, beta));
+      board[i] = null;
+      beta = Math.min(beta, best);
+      if (beta <= alpha) break;
+    }
+    return best;
+  }
+}
+
+function tttMinimaxLimited(board, N, aiSymbol, oppSymbol, maxDepth) {
+  let bestScore = -Infinity;
+  let bestMove = -1;
+
+  for (let i = 0; i < board.length; i++) {
+    if (board[i] !== null) continue;
+    board[i] = aiSymbol;
+    const score = minimaxLimited(board, N, false, aiSymbol, oppSymbol, maxDepth - 1, -Infinity, Infinity);
+    board[i] = null;
+    if (score > bestScore) { bestScore = score; bestMove = i; }
+  }
+  return bestMove;
+}
+
+function minimaxLimited(board, N, isMaximizing, aiSymbol, oppSymbol, depth, alpha, beta) {
+  const winner = checkWin(board, N);
+  if (winner === aiSymbol) return 1000;
+  if (winner === oppSymbol) return -1000;
+  if (isDraw(board)) return 0;
+  if (depth <= 0) return tttHeuristic(board, N, aiSymbol, oppSymbol);
+
+  if (isMaximizing) {
+    let best = -Infinity;
+    for (let i = 0; i < board.length; i++) {
+      if (board[i] !== null) continue;
+      board[i] = aiSymbol;
+      best = Math.max(best, minimaxLimited(board, N, false, aiSymbol, oppSymbol, depth - 1, alpha, beta));
+      board[i] = null;
+      alpha = Math.max(alpha, best);
+      if (beta <= alpha) break;
+    }
+    return best;
+  } else {
+    let best = Infinity;
+    for (let i = 0; i < board.length; i++) {
+      if (board[i] !== null) continue;
+      board[i] = oppSymbol;
+      best = Math.min(best, minimaxLimited(board, N, true, aiSymbol, oppSymbol, depth - 1, alpha, beta));
+      board[i] = null;
+      beta = Math.min(beta, best);
+      if (beta <= alpha) break;
+    }
+    return best;
+  }
+}
+
+function tttHeuristic(board, N, aiSymbol, oppSymbol) {
+  let score = 0;
+  const lines = [];
+  // Rows
+  for (let r = 0; r < N; r++) {
+    const line = [];
+    for (let c = 0; c < N; c++) line.push(r * N + c);
+    lines.push(line);
+  }
+  // Cols
+  for (let c = 0; c < N; c++) {
+    const line = [];
+    for (let r = 0; r < N; r++) line.push(r * N + c);
+    lines.push(line);
+  }
+  // Diags
+  const d1 = [], d2 = [];
+  for (let i = 0; i < N; i++) { d1.push(i * N + i); d2.push(i * N + (N - 1 - i)); }
+  lines.push(d1, d2);
+
+  for (const line of lines) {
+    let aiCount = 0, oppCount = 0;
+    for (const idx of line) {
+      if (board[idx] === aiSymbol) aiCount++;
+      else if (board[idx] === oppSymbol) oppCount++;
+    }
+    if (oppCount === 0 && aiCount > 0) score += aiCount * aiCount;
+    if (aiCount === 0 && oppCount > 0) score -= oppCount * oppCount;
+  }
+  // Center control bonus
+  const center = Math.floor(N / 2);
+  const centerIdx = center * N + center;
+  if (board[centerIdx] === aiSymbol) score += 3;
+  else if (board[centerIdx] === oppSymbol) score -= 3;
+  return score;
+}
+
 // ── SPS logic ─────────────────────────────────────────────────────────────────
 // Returns: 1 if p1 wins, 2 if p2 wins, 0 if tie
 function spsResult(c1, c2) {
@@ -67,6 +213,15 @@ function spsResult(c1, c2) {
       (c1 === 'scissors' && c2 === 'paper') ||
       (c1 === 'paper' && c2 === 'rock')) return 1;
   return 2;
+}
+
+function spsAiChoice(room) {
+  const picks = ['rock', 'paper', 'scissors'];
+  const lastAi = room.roundHistory.length > 0
+    ? room.roundHistory[room.roundHistory.length - 1].choices['AI']
+    : null;
+  if (lastAi && lastAi !== 'none' && Math.random() < 0.3) return lastAi;
+  return picks[Math.floor(Math.random() * picks.length)];
 }
 
 function resolveSpsRound(room) {
@@ -162,6 +317,25 @@ function startSpsRound(room) {
     room.roundTimer = null;
     resolveSpsRound(room);
   }, 10000);
+
+  // Schedule AI choice for single-player rooms
+  if (room.isAiRoom) {
+    if (room.aiTimer) { clearTimeout(room.aiTimer); room.aiTimer = null; }
+    const humanId = room.players[0].id;
+    const delay = 1500 + Math.random() * 3500;
+    room.aiTimer = setTimeout(() => {
+      room.aiTimer = null;
+      if (rooms.get(room.code) !== room) return;
+      if (room.status !== 'playing') return;
+      if (room.choices['AI']) return;
+      room.choices['AI'] = spsAiChoice(room);
+      io.to(humanId).emit('opponentChose');
+      if (room.choices[humanId]) {
+        if (room.roundTimer) { clearTimeout(room.roundTimer); room.roundTimer = null; }
+        resolveSpsRound(room);
+      }
+    }, delay);
+  }
 }
 
 // ── GVB (Gigaverse Battle) logic ──────────────────────────────────────────────
@@ -251,6 +425,75 @@ function randomAvailableMove(playerCharges) {
   return available[Math.floor(Math.random() * available.length)];
 }
 
+// ── GVB AI ───────────────────────────────────────────────────────────────────
+const GVB_AI_ARCHETYPES = [
+  { name: 'Berserker',    hp: 2, max_armor: 1, sword_atk: 4, sword_def: 1, shield_atk: 0, shield_def: 0, magic_atk: 2, magic_def: 0 },
+  { name: 'Wall',         hp: 3, max_armor: 3, sword_atk: 0, sword_def: 0, shield_atk: 1, shield_def: 3, magic_atk: 0, magic_def: 0 },
+  { name: 'Sorcerer',     hp: 2, max_armor: 1, sword_atk: 0, sword_def: 0, shield_atk: 1, shield_def: 1, magic_atk: 4, magic_def: 1 },
+  { name: 'Balanced',     hp: 2, max_armor: 2, sword_atk: 1, sword_def: 1, shield_atk: 1, shield_def: 1, magic_atk: 1, magic_def: 1 },
+  { name: 'Glass Cannon', hp: 3, max_armor: 0, sword_atk: 3, sword_def: 0, shield_atk: 0, shield_def: 0, magic_atk: 4, magic_def: 0 },
+];
+
+function gvbAiAllocate() {
+  const arch = GVB_AI_ARCHETYPES[Math.floor(Math.random() * GVB_AI_ARCHETYPES.length)];
+  const { name, ...deltas } = arch;
+  return deltas;
+}
+
+function gvbAiCombatMove(room) {
+  const aiPlayer = room.players.find(p => p.id === 'AI');
+  const aiCharges = room.charges['AI'];
+  const available = ['sword', 'shield', 'magic'].filter(
+    m => aiCharges[m].count > 0 && aiCharges[m].cooldown === 0
+  );
+  if (!available.length) return randomAvailableMove(aiCharges) || 'sword';
+  if (available.length === 1) return available[0];
+
+  // Sudden death: pick highest ATK available
+  if (room.suddenDeath) {
+    let bestMove = available[0], bestAtk = 0;
+    for (const m of available) {
+      const atk = aiPlayer.stats[`${m}_atk`];
+      if (atk > bestAtk) { bestAtk = atk; bestMove = m; }
+    }
+    return bestMove;
+  }
+
+  const COUNTER = { sword: 'shield', shield: 'magic', magic: 'sword' };
+
+  // Pattern counter (40%): check opponent's last 3 moves
+  let counterPick = null;
+  if (room.roundHistory.length >= 2) {
+    const humanId = room.players.find(p => p.id !== 'AI').id;
+    const recent = room.roundHistory.slice(-3);
+    const counts = {};
+    for (const entry of recent) {
+      const m = entry.moves[humanId];
+      if (m) counts[m] = (counts[m] || 0) + 1;
+    }
+    let mostCommon = null, maxCount = 0;
+    for (const [m, c] of Object.entries(counts)) {
+      if (c >= 2 && c > maxCount) { mostCommon = m; maxCount = c; }
+    }
+    if (mostCommon && available.includes(COUNTER[mostCommon])) {
+      counterPick = COUNTER[mostCommon];
+    }
+  }
+
+  // Stat-aware bias (30%): highest ATK stat from available
+  let statPick = available[0], bestAtk = 0;
+  for (const m of available) {
+    const atk = aiPlayer.stats[`${m}_atk`];
+    if (atk > bestAtk) { bestAtk = atk; statPick = m; }
+  }
+
+  // Weighted pick: 40% counter, 30% stat, 30% random
+  const roll = Math.random();
+  if (roll < 0.4 && counterPick) return counterPick;
+  if (roll < 0.7) return statPick;
+  return available[Math.floor(Math.random() * available.length)];
+}
+
 function startGvbBattle(room) {
   if (room.allocationTimer) { clearTimeout(room.allocationTimer); room.allocationTimer = null; }
   room.status = 'battle';
@@ -279,10 +522,29 @@ function startGvbTurnTimer(room) {
     }
     resolveGvbRound(room);
   }, 30000);
+
+  // Schedule AI combat move
+  if (room.isAiRoom) {
+    if (room.aiTimer) { clearTimeout(room.aiTimer); room.aiTimer = null; }
+    const delay = 1000 + Math.random() * 2000;
+    room.aiTimer = setTimeout(() => {
+      room.aiTimer = null;
+      if (rooms.get(room.code) !== room || room.status !== 'battle') return;
+      if (room.choices['AI']) return;
+      const move = gvbAiCombatMove(room);
+      if (!move || room.charges['AI'][move].count <= 0 || room.charges['AI'][move].cooldown > 0) return;
+      room.charges['AI'][move].count -= 1;
+      room.choices['AI'] = move;
+      const humanId = room.players.find(p => p.id !== 'AI').id;
+      io.to(humanId).emit('opponent_chose', {});
+      if (room.choices[humanId]) resolveGvbRound(room);
+    }, delay);
+  }
 }
 
 function resolveGvbRound(room) {
   if (room.turnTimer) { clearTimeout(room.turnTimer); room.turnTimer = null; }
+  if (room.aiTimer) { clearTimeout(room.aiTimer); room.aiTimer = null; }
   const [p1, p2] = room.players;
   const m1 = room.choices[p1.id];
   const m2 = room.choices[p2.id];
@@ -391,6 +653,38 @@ function resolveGvbRound(room) {
   }
 }
 
+// ── TTT AI move scheduler ────────────────────────────────────────────────────
+function scheduleTttAiMove(room, code) {
+  if (room.aiTimer) clearTimeout(room.aiTimer);
+  const emptyCells = room.board.filter(c => c === null).length;
+  const delay = emptyCells > 6 ? 800 + Math.random() * 700 : 300 + Math.random() * 300;
+  room.aiTimer = setTimeout(() => {
+    room.aiTimer = null;
+    if (rooms.get(room.code) !== room || room.status !== 'playing') return;
+    const aiPlayer = room.players.find(p => p.id === 'AI');
+    const aiIndex = tttAiMove(room.board, room.gridSize, aiPlayer.symbol);
+    if (aiIndex < 0) return;
+    room.board[aiIndex] = aiPlayer.symbol;
+
+    const winner = checkWin(room.board, room.gridSize);
+    const draw = !winner && isDraw(room.board);
+
+    if (winner || draw) {
+      room.status = 'over';
+      if (winner) room.scores['AI'] = (room.scores['AI'] || 0) + 1;
+      io.to(code).emit('gameOver', {
+        board: room.board,
+        winner: winner ? { id: 'AI', name: aiPlayer.name, symbol: winner } : null,
+        draw, scores: room.scores, players: room.players,
+      });
+    } else {
+      const humanId = room.players.find(p => p.id !== 'AI').id;
+      room.currentTurn = humanId;
+      io.to(code).emit('boardUpdate', { board: room.board, currentTurn: room.currentTurn });
+    }
+  }, delay);
+}
+
 // ── Socket handlers ───────────────────────────────────────────────────────────
 io.on('connection', (socket) => {
   console.log(`Player connected: ${socket.id}`);
@@ -438,6 +732,86 @@ io.on('connection', (socket) => {
     socket.join(code);
     socket.data.roomCode = code;
     console.log(`Room ${code} created by ${name} (${type})`);
+  });
+
+  socket.on('createAiRoom', ({ name, gameType: gt, gridSize: gs, bestOf }) => {
+    const type = gt === 'sps' ? 'sps' : gt === 'gvb' ? 'gvb' : gt === 'ttt' ? 'ttt' : 'sps';
+    const code = generateRoomCode();
+
+    if (type === 'ttt') {
+      const validSizes = [3, 4, 5];
+      const size = validSizes.includes(gs) ? gs : 3;
+      const room = {
+        code, gameType: 'ttt', gridSize: size, isAiRoom: true,
+        board: Array(size * size).fill(null),
+        players: [{ id: socket.id, name: name || 'Player 1', symbol: 'X' }, { id: 'AI', name: 'CPU', symbol: 'O' }],
+        currentTurn: socket.id, scores: { [socket.id]: 0, 'AI': 0 },
+        status: 'playing', rematchVotes: new Set(), round: 1, aiTimer: null,
+      };
+      rooms.set(code, room);
+      socket.join(code);
+      socket.data.roomCode = code;
+      socket.emit('gameStart', {
+        board: room.board, currentTurn: room.currentTurn,
+        players: room.players, gridSize: room.gridSize, scores: room.scores,
+      });
+      console.log(`AI TTT room ${code} created by ${name}`);
+
+    } else if (type === 'gvb') {
+      const room = {
+        code, gameType: 'gvb', isAiRoom: true,
+        players: [{ id: socket.id, name: name || 'Player 1', stats: null }, { id: 'AI', name: 'CPU', stats: null }],
+        status: 'allocating', allocationTimer: null, turnTimer: null, aiTimer: null,
+        choices: {}, hp: {}, armor: {}, charges: {},
+        roundNumber: 1, suddenDeath: false, roundHistory: [], rematchVotes: new Set(),
+      };
+      rooms.set(code, room);
+      socket.join(code);
+      socket.data.roomCode = code;
+      socket.emit('room_joined', { players: room.players });
+      // AI allocates after 2-4s delay
+      const aiDelay = 2000 + Math.random() * 2000;
+      room.aiTimer = setTimeout(() => {
+        room.aiTimer = null;
+        if (rooms.get(room.code) !== room || room.status !== 'allocating') return;
+        const aiPlayer = room.players.find(p => p.id === 'AI');
+        const deltas = gvbAiAllocate();
+        aiPlayer.stats = buildStats(deltas);
+        socket.emit('opponent_ready', {});
+        if (room.players.every(p => p.stats)) startGvbBattle(room);
+      }, aiDelay);
+      // 60s allocation timer
+      room.allocationTimer = setTimeout(() => {
+        room.allocationTimer = null;
+        for (const player of room.players) {
+          if (!player.stats) player.stats = buildStats(autoDistributeRemaining({}));
+        }
+        if (rooms.get(room.code) === room && room.status === 'allocating') startGvbBattle(room);
+      }, 60000);
+      console.log(`AI GVB room ${code} created by ${name}`);
+
+    } else {
+      // SPS
+      const validBestOf = [3, 5, 7];
+      const bo = validBestOf.includes(bestOf) ? bestOf : 3;
+      const room = {
+        code, gameType: 'sps', bestOf: bo, isAiRoom: true,
+        players: [{ id: socket.id, name: name || 'Player 1' }, { id: 'AI', name: 'CPU' }],
+        scores: { [socket.id]: 0, 'AI': 0 },
+        choices: {}, roundTimer: null, aiTimer: null,
+        roundHistory: [], roundNumber: 1,
+        status: 'playing', rematchVotes: new Set(),
+      };
+      rooms.set(code, room);
+      socket.join(code);
+      socket.data.roomCode = code;
+      socket.emit('spsGameStart', {
+        players: room.players, scores: room.scores,
+        bestOf: bo, roundNumber: 1, roundHistory: [],
+      });
+      setTimeout(() => startSpsRound(room), 1200);
+      console.log(`AI SPS room ${code} created by ${name}`);
+    }
   });
 
   socket.on('joinRoom', ({ code, name }) => {
@@ -510,6 +884,11 @@ io.on('connection', (socket) => {
     } else {
       room.currentTurn = room.players.find(p => p.id !== socket.id).id;
       io.to(code).emit('boardUpdate', { board: room.board, currentTurn: room.currentTurn });
+
+      // Schedule AI move if it's now AI's turn
+      if (room.isAiRoom && room.currentTurn === 'AI') {
+        scheduleTttAiMove(room, code);
+      }
     }
   });
 
@@ -569,6 +948,65 @@ io.on('connection', (socket) => {
     const room = rooms.get(code);
     if (!room || room.status !== 'over') return;
 
+    if (room.isAiRoom) {
+      if (room.aiTimer) { clearTimeout(room.aiTimer); room.aiTimer = null; }
+      if (room.turnTimer) { clearTimeout(room.turnTimer); room.turnTimer = null; }
+      if (room.allocationTimer) { clearTimeout(room.allocationTimer); room.allocationTimer = null; }
+
+      if (room.gameType === 'ttt') {
+        room.round += 1;
+        room.board = Array(room.gridSize * room.gridSize).fill(null);
+        room.players.forEach(p => { p.symbol = p.symbol === 'X' ? 'O' : 'X'; });
+        room.currentTurn = room.players.find(p => p.symbol === 'X').id;
+        room.status = 'playing';
+        socket.emit('rematchReady', {
+          board: room.board, currentTurn: room.currentTurn,
+          players: room.players, scores: room.scores, gridSize: room.gridSize,
+        });
+        // If AI is X (goes first), schedule AI move
+        if (room.currentTurn === 'AI') {
+          scheduleTttAiMove(room, code);
+        }
+      } else if (room.gameType === 'gvb') {
+        room.players.forEach(p => { p.stats = null; });
+        room.hp = {}; room.armor = {}; room.charges = {};
+        room.choices = {}; room.roundNumber = 1; room.suddenDeath = false; room.roundHistory = [];
+        room.status = 'allocating';
+        socket.emit('rematch_starting', {});
+        // AI re-allocates after 2-4s
+        const aiDelay = 2000 + Math.random() * 2000;
+        room.aiTimer = setTimeout(() => {
+          room.aiTimer = null;
+          if (rooms.get(room.code) !== room || room.status !== 'allocating') return;
+          const aiPlayer = room.players.find(p => p.id === 'AI');
+          const deltas = gvbAiAllocate();
+          aiPlayer.stats = buildStats(deltas);
+          socket.emit('opponent_ready', {});
+          if (room.players.every(p => p.stats)) startGvbBattle(room);
+        }, aiDelay);
+        room.allocationTimer = setTimeout(() => {
+          room.allocationTimer = null;
+          for (const player of room.players) {
+            if (!player.stats) player.stats = buildStats(autoDistributeRemaining({}));
+          }
+          if (rooms.get(room.code) === room && room.status === 'allocating') startGvbBattle(room);
+        }, 60000);
+      } else {
+        // SPS
+        room.status = 'playing';
+        room.scores = { [socket.id]: 0, 'AI': 0 };
+        room.roundNumber = 1;
+        room.choices = {};
+        room.roundHistory = [];
+        socket.emit('spsGameStart', {
+          players: room.players, scores: room.scores,
+          bestOf: room.bestOf, roundNumber: 1, roundHistory: [],
+        });
+        setTimeout(() => startSpsRound(room), 1200);
+      }
+      return;
+    }
+
     room.rematchVotes.add(socket.id);
 
     if (room.rematchVotes.size === 2) {
@@ -619,10 +1057,11 @@ io.on('connection', (socket) => {
     const room = rooms.get(code);
     if (!room) return;
     if (room.roundTimer) clearTimeout(room.roundTimer);
+    if (room.aiTimer) clearTimeout(room.aiTimer);
     if (room.allocationTimer) clearTimeout(room.allocationTimer);
     if (room.turnTimer) clearTimeout(room.turnTimer);
     console.log(`Player ${socket.id} disconnected from room ${code}`);
-    socket.to(code).emit('opponentDisconnected');
+    if (!room.isAiRoom) socket.to(code).emit('opponentDisconnected');
     rooms.delete(code);
     console.log(`Room ${code} deleted`);
   });
