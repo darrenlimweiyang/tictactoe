@@ -31,6 +31,8 @@ const TIMER_DURATION = 10000;
 let selectedGameType = 'ttt';
 let selectedGridSize = 3;
 let selectedBestOf = 3;
+let selectedWinCondition = 3;
+let winCondition = 3;
 
 // ══ DOM REFS ════════════════════════════════════════════════════════════════
 const screens = {
@@ -48,6 +50,7 @@ const roomCodeInput   = document.getElementById('room-code-input');
 const lobbyError      = document.getElementById('lobby-error');
 const displayRoomCode = document.getElementById('display-room-code');
 const gridSizeSection = document.getElementById('grid-size-section');
+const winConditionSection = document.getElementById('win-condition-section');
 const bestofSection   = document.getElementById('bestof-section');
 
 // TTT
@@ -61,6 +64,7 @@ const resultIcon      = document.getElementById('result-icon');
 const finalScores     = document.getElementById('final-scores');
 const btnPlayAgain    = document.getElementById('btn-play-again');
 const rematchStatus   = document.getElementById('rematch-status');
+const winConditionBadge = document.getElementById('win-condition-badge');
 
 // SPS
 const spsStatus       = document.getElementById('sps-status');
@@ -103,12 +107,15 @@ document.querySelectorAll('.game-type-btn').forEach(btn => {
     aiBtn.classList.remove('hidden');
     if (selectedGameType === 'sps') {
       gridSizeSection.classList.add('hidden');
+      winConditionSection.classList.add('hidden');
       bestofSection.classList.remove('hidden');
     } else if (selectedGameType === 'gvb') {
       gridSizeSection.classList.add('hidden');
+      winConditionSection.classList.add('hidden');
       bestofSection.classList.add('hidden');
     } else {
       gridSizeSection.classList.remove('hidden');
+      winConditionSection.classList.remove('hidden');
       bestofSection.classList.add('hidden');
     }
   });
@@ -120,8 +127,27 @@ document.querySelectorAll('.size-btn').forEach(btn => {
     document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     selectedGridSize = parseInt(btn.dataset.size, 10);
+    regenerateWinConditionButtons(selectedGridSize);
   });
 });
+
+function regenerateWinConditionButtons(N) {
+  const container = document.querySelector('.win-condition-btns');
+  container.innerHTML = '';
+  for (let w = 3; w <= N; w++) {
+    const b = document.createElement('button');
+    b.className = 'win-btn' + (w === N ? ' active' : '');
+    b.dataset.win = w;
+    b.textContent = `${w} in a row`;
+    b.addEventListener('click', () => {
+      container.querySelectorAll('.win-btn').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      selectedWinCondition = w;
+    });
+    container.appendChild(b);
+  }
+  selectedWinCondition = N;
+}
 
 // Best-of
 document.querySelectorAll('.bestof-btn').forEach(btn => {
@@ -139,12 +165,13 @@ document.getElementById('btn-create').addEventListener('click', () => {
     gameType: selectedGameType,
     gridSize: selectedGridSize,
     bestOf: selectedBestOf,
+    winCondition: selectedWinCondition,
   });
 });
 
 document.getElementById('btn-play-vs-ai').addEventListener('click', () => {
   const name = playerNameInput.value.trim() || 'Player 1';
-  socket.emit('createAiRoom', { name, gameType: selectedGameType, gridSize: selectedGridSize, bestOf: selectedBestOf });
+  socket.emit('createAiRoom', { name, gameType: selectedGameType, gridSize: selectedGridSize, bestOf: selectedBestOf, winCondition: selectedWinCondition });
 });
 
 document.getElementById('btn-join').addEventListener('click', () => {
@@ -232,21 +259,41 @@ function renderBoard(board) {
 function highlightWinningCells(board) {
   const cells = boardEl.querySelectorAll('.cell');
   const N = gridSize;
+  const W = winCondition;
   function mark(indices) { indices.forEach(i => cells[i].classList.add('winning')); }
+
+  // Rows
   for (let r = 0; r < N; r++) {
-    const row = Array.from({ length: N }, (_, c) => r * N + c);
-    const sym = board[row[0]];
-    if (sym && row.every(i => board[i] === sym)) { mark(row); return; }
+    for (let c = 0; c <= N - W; c++) {
+      const seg = Array.from({ length: W }, (_, k) => r * N + c + k);
+      const sym = board[seg[0]];
+      if (sym && seg.every(i => board[i] === sym)) { mark(seg); return; }
+    }
   }
+  // Columns
   for (let c = 0; c < N; c++) {
-    const col = Array.from({ length: N }, (_, r) => r * N + c);
-    const sym = board[col[0]];
-    if (sym && col.every(i => board[i] === sym)) { mark(col); return; }
+    for (let r = 0; r <= N - W; r++) {
+      const seg = Array.from({ length: W }, (_, k) => (r + k) * N + c);
+      const sym = board[seg[0]];
+      if (sym && seg.every(i => board[i] === sym)) { mark(seg); return; }
+    }
   }
-  const d1 = Array.from({ length: N }, (_, i) => i * N + i);
-  if (board[d1[0]] && d1.every(i => board[i] === board[d1[0]])) { mark(d1); return; }
-  const d2 = Array.from({ length: N }, (_, i) => i * N + (N - 1 - i));
-  if (board[d2[0]] && d2.every(i => board[i] === board[d2[0]])) { mark(d2); }
+  // Diagonals (top-left to bottom-right)
+  for (let r = 0; r <= N - W; r++) {
+    for (let c = 0; c <= N - W; c++) {
+      const seg = Array.from({ length: W }, (_, k) => (r + k) * N + (c + k));
+      const sym = board[seg[0]];
+      if (sym && seg.every(i => board[i] === sym)) { mark(seg); return; }
+    }
+  }
+  // Diagonals (top-right to bottom-left)
+  for (let r = 0; r <= N - W; r++) {
+    for (let c = W - 1; c < N; c++) {
+      const seg = Array.from({ length: W }, (_, k) => (r + k) * N + (c - k));
+      const sym = board[seg[0]];
+      if (sym && seg.every(i => board[i] === sym)) { mark(seg); return; }
+    }
+  }
 }
 
 function updateTttScoreBar() {
@@ -605,6 +652,7 @@ socket.on('gameStart', (data) => {
   players     = data.players;
   scores      = data.scores;
   gridSize    = data.gridSize;
+  winCondition = data.winCondition || data.gridSize;
   currentTurn = data.currentTurn;
   tttGameOver = false;
   tttIsAiGame = players.some(p => p.id === 'AI');
@@ -614,6 +662,7 @@ socket.on('gameStart', (data) => {
   const code = getRoomCode();
   if (code) gameRoomCode.textContent = code;
   if (tttIsAiGame) gameRoomCode.textContent = 'VS CPU';
+  winConditionBadge.textContent = (winCondition === gridSize) ? '' : `${winCondition} in a row to win`;
   updateTttScoreBar();
   updateTurnIndicator();
   renderBoard(data.board);
@@ -635,10 +684,12 @@ socket.on('gameOver', ({ board, winner, draw, scores: newScores, players: newPla
 
 socket.on('rematchReady', (data) => {
   players = data.players; scores = data.scores;
-  gridSize = data.gridSize; currentTurn = data.currentTurn;
+  gridSize = data.gridSize; winCondition = data.winCondition || data.gridSize;
+  currentTurn = data.currentTurn;
   tttGameOver = false; tttWaitingRematch = false;
   mySymbol = players.find(p => p.id === myId)?.symbol;
   gameOverOverlay.classList.add('hidden');
+  winConditionBadge.textContent = (winCondition === gridSize) ? '' : `${winCondition} in a row to win`;
   updateTttScoreBar(); updateTurnIndicator(); renderBoard(data.board);
 });
 
@@ -704,6 +755,7 @@ socket.on('opponentDisconnected', () => {
     document.getElementById('gvb-disconnected').classList.remove('hidden');
   } else {
     disconnOverlay.classList.remove('hidden');
+    winConditionBadge.textContent = '';
   }
 });
 
