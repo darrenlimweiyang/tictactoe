@@ -23,34 +23,57 @@ function generateRoomCode() {
 }
 
 // ── Tic-Tac-Toe logic ────────────────────────────────────────────────────────
-function checkWin(board, gridSize) {
+function checkWin(board, gridSize, winCondition) {
   const N = gridSize;
+  const W = winCondition || N;
+
+  // Rows
   for (let r = 0; r < N; r++) {
-    const start = r * N;
-    const symbol = board[start];
-    if (!symbol) continue;
-    if (board.slice(start, start + N).every(cell => cell === symbol)) return symbol;
-  }
-  for (let c = 0; c < N; c++) {
-    const symbol = board[c];
-    if (!symbol) continue;
-    let win = true;
-    for (let r = 1; r < N; r++) {
-      if (board[r * N + c] !== symbol) { win = false; break; }
+    for (let c = 0; c <= N - W; c++) {
+      const sym = board[r * N + c];
+      if (!sym) continue;
+      let win = true;
+      for (let k = 1; k < W; k++) {
+        if (board[r * N + c + k] !== sym) { win = false; break; }
+      }
+      if (win) return sym;
     }
-    if (win) return symbol;
   }
-  const d1 = board[0];
-  if (d1) {
-    let win = true;
-    for (let i = 1; i < N; i++) { if (board[i * N + i] !== d1) { win = false; break; } }
-    if (win) return d1;
+  // Columns
+  for (let c = 0; c < N; c++) {
+    for (let r = 0; r <= N - W; r++) {
+      const sym = board[r * N + c];
+      if (!sym) continue;
+      let win = true;
+      for (let k = 1; k < W; k++) {
+        if (board[(r + k) * N + c] !== sym) { win = false; break; }
+      }
+      if (win) return sym;
+    }
   }
-  const d2 = board[N - 1];
-  if (d2) {
-    let win = true;
-    for (let i = 1; i < N; i++) { if (board[i * N + (N - 1 - i)] !== d2) { win = false; break; } }
-    if (win) return d2;
+  // Diagonals (top-left to bottom-right)
+  for (let r = 0; r <= N - W; r++) {
+    for (let c = 0; c <= N - W; c++) {
+      const sym = board[r * N + c];
+      if (!sym) continue;
+      let win = true;
+      for (let k = 1; k < W; k++) {
+        if (board[(r + k) * N + (c + k)] !== sym) { win = false; break; }
+      }
+      if (win) return sym;
+    }
+  }
+  // Diagonals (top-right to bottom-left)
+  for (let r = 0; r <= N - W; r++) {
+    for (let c = W - 1; c < N; c++) {
+      const sym = board[r * N + c];
+      if (!sym) continue;
+      let win = true;
+      for (let k = 1; k < W; k++) {
+        if (board[(r + k) * N + (c - k)] !== sym) { win = false; break; }
+      }
+      if (win) return sym;
+    }
   }
   return null;
 }
@@ -60,7 +83,7 @@ function isDraw(board) {
 }
 
 // ── TTT AI (minimax) ─────────────────────────────────────────────────────────
-function tttAiMove(board, gridSize, aiSymbol) {
+function tttAiMove(board, gridSize, aiSymbol, winCondition) {
   const oppSymbol = aiSymbol === 'X' ? 'O' : 'X';
   const emptyCells = [];
   for (let i = 0; i < board.length; i++) {
@@ -68,31 +91,32 @@ function tttAiMove(board, gridSize, aiSymbol) {
   }
   if (emptyCells.length === 0) return -1;
 
-  if (gridSize === 3) {
+  if (gridSize === 3 && winCondition === 3) {
     // Full minimax with alpha-beta pruning — perfect play
-    return tttMinimaxFull(board, gridSize, aiSymbol, oppSymbol);
+    return tttMinimaxFull(board, gridSize, aiSymbol, oppSymbol, winCondition);
   } else {
     // Depth-limited minimax with heuristic eval for 4x4/5x5
-    return tttMinimaxLimited(board, gridSize, aiSymbol, oppSymbol, 5);
+    const depth = (winCondition < gridSize) ? 7 : 5;
+    return tttMinimaxLimited(board, gridSize, aiSymbol, oppSymbol, depth, winCondition);
   }
 }
 
-function tttMinimaxFull(board, N, aiSymbol, oppSymbol) {
+function tttMinimaxFull(board, N, aiSymbol, oppSymbol, winCondition) {
   let bestScore = -Infinity;
   let bestMove = -1;
 
   for (let i = 0; i < board.length; i++) {
     if (board[i] !== null) continue;
     board[i] = aiSymbol;
-    const score = minimaxFull(board, N, false, aiSymbol, oppSymbol, -Infinity, Infinity);
+    const score = minimaxFull(board, N, false, aiSymbol, oppSymbol, -Infinity, Infinity, winCondition);
     board[i] = null;
     if (score > bestScore) { bestScore = score; bestMove = i; }
   }
   return bestMove;
 }
 
-function minimaxFull(board, N, isMaximizing, aiSymbol, oppSymbol, alpha, beta) {
-  const winner = checkWin(board, N);
+function minimaxFull(board, N, isMaximizing, aiSymbol, oppSymbol, alpha, beta, winCondition) {
+  const winner = checkWin(board, N, winCondition);
   if (winner === aiSymbol) return 10;
   if (winner === oppSymbol) return -10;
   if (isDraw(board)) return 0;
@@ -102,7 +126,7 @@ function minimaxFull(board, N, isMaximizing, aiSymbol, oppSymbol, alpha, beta) {
     for (let i = 0; i < board.length; i++) {
       if (board[i] !== null) continue;
       board[i] = aiSymbol;
-      best = Math.max(best, minimaxFull(board, N, false, aiSymbol, oppSymbol, alpha, beta));
+      best = Math.max(best, minimaxFull(board, N, false, aiSymbol, oppSymbol, alpha, beta, winCondition));
       board[i] = null;
       alpha = Math.max(alpha, best);
       if (beta <= alpha) break;
@@ -113,7 +137,7 @@ function minimaxFull(board, N, isMaximizing, aiSymbol, oppSymbol, alpha, beta) {
     for (let i = 0; i < board.length; i++) {
       if (board[i] !== null) continue;
       board[i] = oppSymbol;
-      best = Math.min(best, minimaxFull(board, N, true, aiSymbol, oppSymbol, alpha, beta));
+      best = Math.min(best, minimaxFull(board, N, true, aiSymbol, oppSymbol, alpha, beta, winCondition));
       board[i] = null;
       beta = Math.min(beta, best);
       if (beta <= alpha) break;
@@ -122,33 +146,33 @@ function minimaxFull(board, N, isMaximizing, aiSymbol, oppSymbol, alpha, beta) {
   }
 }
 
-function tttMinimaxLimited(board, N, aiSymbol, oppSymbol, maxDepth) {
+function tttMinimaxLimited(board, N, aiSymbol, oppSymbol, maxDepth, winCondition) {
   let bestScore = -Infinity;
   let bestMove = -1;
 
   for (let i = 0; i < board.length; i++) {
     if (board[i] !== null) continue;
     board[i] = aiSymbol;
-    const score = minimaxLimited(board, N, false, aiSymbol, oppSymbol, maxDepth - 1, -Infinity, Infinity);
+    const score = minimaxLimited(board, N, false, aiSymbol, oppSymbol, maxDepth - 1, -Infinity, Infinity, winCondition);
     board[i] = null;
     if (score > bestScore) { bestScore = score; bestMove = i; }
   }
   return bestMove;
 }
 
-function minimaxLimited(board, N, isMaximizing, aiSymbol, oppSymbol, depth, alpha, beta) {
-  const winner = checkWin(board, N);
+function minimaxLimited(board, N, isMaximizing, aiSymbol, oppSymbol, depth, alpha, beta, winCondition) {
+  const winner = checkWin(board, N, winCondition);
   if (winner === aiSymbol) return 1000;
   if (winner === oppSymbol) return -1000;
   if (isDraw(board)) return 0;
-  if (depth <= 0) return tttHeuristic(board, N, aiSymbol, oppSymbol);
+  if (depth <= 0) return tttHeuristic(board, N, aiSymbol, oppSymbol, winCondition);
 
   if (isMaximizing) {
     let best = -Infinity;
     for (let i = 0; i < board.length; i++) {
       if (board[i] !== null) continue;
       board[i] = aiSymbol;
-      best = Math.max(best, minimaxLimited(board, N, false, aiSymbol, oppSymbol, depth - 1, alpha, beta));
+      best = Math.max(best, minimaxLimited(board, N, false, aiSymbol, oppSymbol, depth - 1, alpha, beta, winCondition));
       board[i] = null;
       alpha = Math.max(alpha, best);
       if (beta <= alpha) break;
@@ -159,7 +183,7 @@ function minimaxLimited(board, N, isMaximizing, aiSymbol, oppSymbol, depth, alph
     for (let i = 0; i < board.length; i++) {
       if (board[i] !== null) continue;
       board[i] = oppSymbol;
-      best = Math.min(best, minimaxLimited(board, N, true, aiSymbol, oppSymbol, depth - 1, alpha, beta));
+      best = Math.min(best, minimaxLimited(board, N, true, aiSymbol, oppSymbol, depth - 1, alpha, beta, winCondition));
       board[i] = null;
       beta = Math.min(beta, best);
       if (beta <= alpha) break;
@@ -168,35 +192,58 @@ function minimaxLimited(board, N, isMaximizing, aiSymbol, oppSymbol, depth, alph
   }
 }
 
-function tttHeuristic(board, N, aiSymbol, oppSymbol) {
+function tttHeuristic(board, N, aiSymbol, oppSymbol, winCondition) {
+  const W = winCondition || N;
   let score = 0;
-  const lines = [];
-  // Rows
-  for (let r = 0; r < N; r++) {
-    const line = [];
-    for (let c = 0; c < N; c++) line.push(r * N + c);
-    lines.push(line);
-  }
-  // Cols
-  for (let c = 0; c < N; c++) {
-    const line = [];
-    for (let r = 0; r < N; r++) line.push(r * N + c);
-    lines.push(line);
-  }
-  // Diags
-  const d1 = [], d2 = [];
-  for (let i = 0; i < N; i++) { d1.push(i * N + i); d2.push(i * N + (N - 1 - i)); }
-  lines.push(d1, d2);
 
-  for (const line of lines) {
+  // Collect all windows of length W
+  function evalWindow(indices) {
     let aiCount = 0, oppCount = 0;
-    for (const idx of line) {
+    for (const idx of indices) {
       if (board[idx] === aiSymbol) aiCount++;
       else if (board[idx] === oppSymbol) oppCount++;
     }
-    if (oppCount === 0 && aiCount > 0) score += aiCount * aiCount;
-    if (aiCount === 0 && oppCount > 0) score -= oppCount * oppCount;
+    if (oppCount === 0 && aiCount > 0) {
+      score += (aiCount === W - 1) ? W * 10 : aiCount * aiCount;
+    }
+    if (aiCount === 0 && oppCount > 0) {
+      score -= (oppCount === W - 1) ? W * 10 : oppCount * oppCount;
+    }
   }
+
+  // Rows
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c <= N - W; c++) {
+      const win = [];
+      for (let k = 0; k < W; k++) win.push(r * N + c + k);
+      evalWindow(win);
+    }
+  }
+  // Columns
+  for (let c = 0; c < N; c++) {
+    for (let r = 0; r <= N - W; r++) {
+      const win = [];
+      for (let k = 0; k < W; k++) win.push((r + k) * N + c);
+      evalWindow(win);
+    }
+  }
+  // Diagonals (top-left to bottom-right)
+  for (let r = 0; r <= N - W; r++) {
+    for (let c = 0; c <= N - W; c++) {
+      const win = [];
+      for (let k = 0; k < W; k++) win.push((r + k) * N + (c + k));
+      evalWindow(win);
+    }
+  }
+  // Diagonals (top-right to bottom-left)
+  for (let r = 0; r <= N - W; r++) {
+    for (let c = W - 1; c < N; c++) {
+      const win = [];
+      for (let k = 0; k < W; k++) win.push((r + k) * N + (c - k));
+      evalWindow(win);
+    }
+  }
+
   // Center control bonus
   const center = Math.floor(N / 2);
   const centerIdx = center * N + center;
@@ -662,11 +709,11 @@ function scheduleTttAiMove(room, code) {
     room.aiTimer = null;
     if (rooms.get(room.code) !== room || room.status !== 'playing') return;
     const aiPlayer = room.players.find(p => p.id === 'AI');
-    const aiIndex = tttAiMove(room.board, room.gridSize, aiPlayer.symbol);
+    const aiIndex = tttAiMove(room.board, room.gridSize, aiPlayer.symbol, room.winCondition);
     if (aiIndex < 0) return;
     room.board[aiIndex] = aiPlayer.symbol;
 
-    const winner = checkWin(room.board, room.gridSize);
+    const winner = checkWin(room.board, room.gridSize, room.winCondition);
     const draw = !winner && isDraw(room.board);
 
     if (winner || draw) {
@@ -689,7 +736,7 @@ function scheduleTttAiMove(room, code) {
 io.on('connection', (socket) => {
   console.log(`Player connected: ${socket.id}`);
 
-  socket.on('createRoom', ({ name, gridSize, gameType, bestOf }) => {
+  socket.on('createRoom', ({ name, gridSize, gameType, bestOf, winCondition }) => {
     const code = generateRoomCode();
     const type = gameType === 'sps' ? 'sps' : gameType === 'gvb' ? 'gvb' : 'ttt';
     let room;
@@ -706,8 +753,9 @@ io.on('connection', (socket) => {
     } else if (type === 'ttt') {
       const validSizes = [3, 4, 5];
       const size = validSizes.includes(gridSize) ? gridSize : 3;
+      const wc = Number.isInteger(winCondition) && winCondition >= 3 && winCondition <= size ? winCondition : size;
       room = {
-        code, gameType: 'ttt', gridSize: size,
+        code, gameType: 'ttt', gridSize: size, winCondition: wc,
         board: Array(size * size).fill(null),
         players: [{ id: socket.id, name: name || 'Player 1', symbol: 'X' }],
         currentTurn: null, scores: { [socket.id]: 0 },
@@ -734,15 +782,16 @@ io.on('connection', (socket) => {
     console.log(`Room ${code} created by ${name} (${type})`);
   });
 
-  socket.on('createAiRoom', ({ name, gameType: gt, gridSize: gs, bestOf }) => {
+  socket.on('createAiRoom', ({ name, gameType: gt, gridSize: gs, bestOf, winCondition: wc }) => {
     const type = gt === 'sps' ? 'sps' : gt === 'gvb' ? 'gvb' : gt === 'ttt' ? 'ttt' : 'sps';
     const code = generateRoomCode();
 
     if (type === 'ttt') {
       const validSizes = [3, 4, 5];
       const size = validSizes.includes(gs) ? gs : 3;
+      const winCondition = Number.isInteger(wc) && wc >= 3 && wc <= size ? wc : size;
       const room = {
-        code, gameType: 'ttt', gridSize: size, isAiRoom: true,
+        code, gameType: 'ttt', gridSize: size, winCondition, isAiRoom: true,
         board: Array(size * size).fill(null),
         players: [{ id: socket.id, name: name || 'Player 1', symbol: 'X' }, { id: 'AI', name: 'CPU', symbol: 'O' }],
         currentTurn: socket.id, scores: { [socket.id]: 0, 'AI': 0 },
@@ -754,6 +803,7 @@ io.on('connection', (socket) => {
       socket.emit('gameStart', {
         board: room.board, currentTurn: room.currentTurn,
         players: room.players, gridSize: room.gridSize, scores: room.scores,
+        winCondition: room.winCondition,
       });
       console.log(`AI TTT room ${code} created by ${name}`);
 
@@ -831,6 +881,7 @@ io.on('connection', (socket) => {
       io.to(room.code).emit('gameStart', {
         board: room.board, currentTurn: room.currentTurn,
         players: room.players, gridSize: room.gridSize, scores: room.scores,
+        winCondition: room.winCondition,
       });
     } else if (room.gameType === 'sps') {
       room.players.push({ id: socket.id, name: name || 'Player 2' });
@@ -870,7 +921,7 @@ io.on('connection', (socket) => {
     const player = room.players.find(p => p.id === socket.id);
     room.board[index] = player.symbol;
 
-    const winner = checkWin(room.board, room.gridSize);
+    const winner = checkWin(room.board, room.gridSize, room.winCondition);
     const draw = !winner && isDraw(room.board);
 
     if (winner || draw) {
@@ -962,6 +1013,7 @@ io.on('connection', (socket) => {
         socket.emit('rematchReady', {
           board: room.board, currentTurn: room.currentTurn,
           players: room.players, scores: room.scores, gridSize: room.gridSize,
+          winCondition: room.winCondition,
         });
         // If AI is X (goes first), schedule AI move
         if (room.currentTurn === 'AI') {
@@ -1021,6 +1073,7 @@ io.on('connection', (socket) => {
         io.to(code).emit('rematchReady', {
           board: room.board, currentTurn: room.currentTurn,
           players: room.players, scores: room.scores, gridSize: room.gridSize,
+          winCondition: room.winCondition,
         });
       } else if (room.gameType === 'sps') {
         room.scores = {};

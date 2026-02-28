@@ -196,8 +196,8 @@ input[type="text"]:focus {
 }
 
 /* ════ SIZE / BEST-OF BUTTONS ════ */
-.grid-size-btns { display: flex; gap: 8px; }
-.size-btn, .bestof-btn {
+.grid-size-btns, .win-condition-btns { display: flex; gap: 8px; }
+.size-btn, .bestof-btn, .win-btn {
   flex: 1; padding: 8px 4px;
   background: var(--bg);
   border: 1px solid var(--border);
@@ -208,12 +208,12 @@ input[type="text"]:focus {
   font-size: 0.45rem;
   transition: all 0.2s;
 }
-.size-btn:hover, .bestof-btn:hover {
+.size-btn:hover, .bestof-btn:hover, .win-btn:hover {
   border-color: var(--accent-o);
   color: var(--accent-o);
   box-shadow: 0 0 6px var(--glow-o);
 }
-.size-btn.active, .bestof-btn.active {
+.size-btn.active, .bestof-btn.active, .win-btn.active {
   background: rgba(0,221,255,0.08);
   border-color: var(--accent-o);
   color: var(--accent-o);
@@ -411,6 +411,14 @@ input[type="text"]:focus {
 }
 
 /* ════ TURN INDICATOR ════ */
+.win-condition-badge {
+  text-align: center;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 0.4rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
 .turn-indicator {
   text-align: center;
   font-family: 'Press Start 2P', monospace;
